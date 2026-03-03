@@ -1,0 +1,95 @@
+---
+title: API overview
+description: Use Mypy programmatically in Python applications
+---
+
+Mypy provides a simple, stable API for using it as part of a Python application. The API allows you to run Mypy's type checker programmatically and access the results.
+
+## Core principles
+
+The Mypy API follows these design principles:
+
+- **Simple and non-intrusive**: The API mimics command line activation without starting a new interpreter
+- **Immediate compatibility**: Changes in the command line version of Mypy are immediately usable through the API
+- **No incremental support**: The API doesn't support incremental generation of error messages
+
+## Available functions
+
+The `mypy.api` module provides two main functions:
+
+### mypy.api.run()
+
+Runs Mypy's type checker on the provided arguments. This is the primary way to use Mypy programmatically.
+
+**Signature:** `run(args: list[str]) -> tuple[str, str, int]`
+
+See the [run() documentation](/api/run) for detailed information.
+
+### mypy.api.run_dmypy()
+
+Runs the dmypy daemon client with the provided arguments. 
+
+**Signature:** `run_dmypy(args: list[str]) -> tuple[str, str, int]`
+
+<Warning>
+  `run_dmypy()` is not thread-safe and modifies `sys.stdout` and `sys.stderr` during its invocation.
+</Warning>
+
+See the [run() documentation](/api/run) for detailed information.
+
+## Return value format
+
+Both functions return a tuple of three values:
+
+<ResponseField name="stdout" type="str">
+  What Mypy normally writes to standard output (normal report)
+</ResponseField>
+
+<ResponseField name="stderr" type="str">
+  What Mypy normally writes to standard error (error report)
+</ResponseField>
+
+<ResponseField name="exit_status" type="int">
+  The exit status Mypy normally returns to the operating system
+</ResponseField>
+
+## Basic example
+
+Here's a simple example of using the Mypy API:
+
+```python
+import sys
+from mypy import api
+
+result = api.run(sys.argv[1:])
+
+if result[0]:
+    print('\nType checking report:\n')
+    print(result[0])  # stdout
+
+if result[1]:
+    print('\nError report:\n')
+    print(result[1])  # stderr
+
+print('\nExit status:', result[2])
+```
+
+## Thread safety
+
+<Note>
+  The `run()` function is thread-safe, but `run_dmypy()` is not. If you need to run type checking from multiple threads, use `run()` only.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="run() function" icon="play" href="/api/run">
+    Learn about the main API functions
+  </Card>
+  <Card title="Type system" icon="code" href="/api/types">
+    Explore Mypy's type system classes
+  </Card>
+  <Card title="Error codes" icon="triangle-exclamation" href="/api/error-codes/overview">
+    Understand error classification
+  </Card>
+</CardGroup>

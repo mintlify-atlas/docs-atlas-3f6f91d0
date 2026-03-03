@@ -1,0 +1,278 @@
+---
+title: Literal types
+description: Learn how to use literal types for precise type checking in Mypy.
+---
+
+## What are literal types?
+
+Literal types let you indicate that an expression is equal to some specific primitive value. For example, `Literal["foo"]` means the value is not just a `str`, but specifically the string `"foo"`.
+
+```python
+from typing import Literal, overload
+
+@overload
+def fetch_data(raw: Literal[True]) -> bytes: ...
+@overload
+def fetch_data(raw: Literal[False]) -> str: ...
+@overload
+def fetch_data(raw: bool) -> bytes | str: ...
+
+def fetch_data(raw: bool) -> bytes | str:
+    ...
+
+reveal_type(fetch_data(True))   # Revealed type is "bytes"
+reveal_type(fetch_data(False))  # Revealed type is "str"
+```
+
+## Parameterizing literals
+
+Literal types may contain one or more literal bools, ints, strs, bytes, and enum values:
+
+```python
+from typing import Literal
+
+# Valid literal types
+Literal[42]                    # int literal
+Literal["hello"]               # str literal
+Literal[True]                  # bool literal
+Literal[b"bytes"]              # bytes literal
+Literal[-3, b"foo", MyEnum.A]  # Multiple values
+```
+
+<Warning>
+Literal types cannot contain arbitrary expressions like `Literal[my_string.strip()]` or `Literal[x > 3]`.
+</Warning>
+
+## Multiple values in literals
+
+Literals containing multiple values are equivalent to unions:
+
+```python
+# These are equivalent
+Literal[-3, b"foo", MyEnum.A]
+Literal[-3] | Literal[b"foo"] | Literal[MyEnum.A]
+```
+
+## Literal type aliases
+
+You can create aliases to literal types:
+
+```python
+from typing import Literal
+
+PrimaryColors = Literal["red", "blue", "yellow"]
+SecondaryColors = Literal["purple", "green", "orange"]
+AllowedColors = Literal[PrimaryColors, SecondaryColors]
+
+def paint(color: AllowedColors) -> None:
+    ...
+
+paint("red")        # OK
+paint("turquoise")  # Error: invalid color
+```
+
+## Declaring literal variables
+
+You must explicitly annotate a variable to give it a literal type:
+
+<CodeGroup>
+```python With annotation
+a: Literal[19] = 19
+reveal_type(a)  # Revealed type is "Literal[19]"
+```
+
+```python Without annotation
+b = 19
+reveal_type(b)  # Revealed type is "int"
+```
+</CodeGroup>
+
+## Using Final for literals
+
+You can use `Final` instead of repeating the value:
+
+```python
+from typing import Final, Literal
+
+def expects_literal(x: Literal[19]) -> None:
+    ...
+
+c: Final = 19
+reveal_type(c)      # Revealed type is "Literal[19]?"
+expects_literal(c)  # OK
+```
+
+<Info>
+The `?` indicates the type is context-sensitive. Mypy substitutes the original value when checking.
+</Info>
+
+## Intelligent indexing
+
+Use literal types to precisely index into structured heterogeneous types:
+
+```python
+from typing import Literal, Final
+
+tup = ("foo", 3.4)
+
+# Indexing with an int literal gives exact type
+reveal_type(tup[0])  # Revealed type is "str"
+
+# Regular int gives union type
+int_index = 0
+reveal_type(tup[int_index])  # Revealed type is "str | float"
+
+# Literal or Final gives exact type back
+lit_index: Literal[0] = 0
+fin_index: Final = 0
+reveal_type(tup[lit_index])  # Revealed type is "str"
+reveal_type(tup[fin_index])  # Revealed type is "str"
+```
+
+## Tagged unions
+
+Use literal types to discriminate between union members:
+
+```python
+from typing import Literal, TypedDict
+
+class NewJobEvent(TypedDict):
+    tag: Literal["new-job"]
+    job_name: str
+    config_file_path: str
+
+class CancelJobEvent(TypedDict):
+    tag: Literal["cancel-job"]
+    job_id: int
+
+Event = NewJobEvent | CancelJobEvent
+
+def process_event(event: Event) -> None:
+    if event["tag"] == "new-job":
+        # Type narrowed to NewJobEvent
+        print(event["job_name"])
+    else:
+        # Type narrowed to CancelJobEvent
+        print(event["job_id"])
+```
+
+<Tip>
+This pattern is called "discriminated unions" or "tagged unions" and is very useful for type-safe event handling.
+</Tip>
+
+## Exhaustiveness checking
+
+Mypy can verify that code covers all possible literal or enum cases:
+
+<Tabs>
+  <Tab title="With assert_never">
+    ```python
+    from typing import Literal
+    from typing_extensions import assert_never
+    
+    PossibleValues = Literal['one', 'two']
+    
+    def validate(x: PossibleValues) -> bool:
+        if x == 'one':
+            return True
+        elif x == 'two':
+            return False
+        assert_never(x)
+    ```
+  </Tab>
+  
+  <Tab title="Missing case">
+    ```python
+    PossibleValues = Literal['one', 'two', 'three']
+    
+    def validate(x: PossibleValues) -> bool:
+        if x == 'one':
+            return True
+        elif x == 'two':
+            return False
+        # Error: Argument 1 to "assert_never" has
+        # incompatible type "Literal['three']"
+        assert_never(x)
+    ```
+  </Tab>
+</Tabs>
+
+## Match statements
+
+Exhaustiveness checking works with match statements (Python 3.10+):
+
+```python
+from typing import Literal
+from typing_extensions import assert_never
+
+PossibleValues = Literal['one', 'two']
+
+def validate(x: PossibleValues) -> bool:
+    match x:
+        case 'one':
+            return True
+        case 'two':
+            return False
+    assert_never(x)
+```
+
+## Enums with literals
+
+Mypy treats enum members as literal types:
+
+```python
+from enum import Enum
+from typing_extensions import assert_never
+
+class Direction(Enum):
+    up = 'up'
+    down = 'down'
+
+reveal_type(Direction.up)  # Revealed type is "Literal[Direction.up]?"
+
+def choose_direction(direction: Direction) -> None:
+    if direction is Direction.up:
+        reveal_type(direction)  # Revealed type is "Literal[Direction.up]"
+        print('Going up!')
+        return
+    elif direction is Direction.down:
+        print('Down')
+        return
+    assert_never(direction)
+```
+
+## Limitations
+
+Mypy doesn't perform constant folding on literal types:
+
+```python
+a: Literal[3] = 3
+b: Literal[5] = 5
+
+# Mypy infers 'int', not 'Literal[8]'
+reveal_type(a + b)  # Revealed type is "int"
+```
+
+<Note>
+Literal types are treated as regular subtypes. For example, `Literal[3]` is a subtype of `int` and inherits all of `int`'s methods.
+</Note>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use tagged unions for variants">
+    Literal types combined with TypedDict or dataclasses create type-safe discriminated unions.
+  </Accordion>
+  
+  <Accordion title="Enable exhaustiveness checking">
+    Use `assert_never()` to ensure you handle all cases when working with literals or enums.
+  </Accordion>
+  
+  <Accordion title="Prefer enums for related constants">
+    When you have a set of related string constants, consider using an Enum instead of string literals.
+  </Accordion>
+  
+  <Accordion title="Use Final for conciseness">
+    `Final` variables work like literal types in most contexts while being less verbose.
+  </Accordion>
+</AccordionGroup>

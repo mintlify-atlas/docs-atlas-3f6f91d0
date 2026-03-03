@@ -1,0 +1,255 @@
+---
+title: Class basics
+description: Learn how to add type annotations to Python classes.
+---
+
+## Instance and class attributes
+
+Mypy detects if you try to access a missing attribute. For this to work correctly, instance and class attributes must be defined or initialized within the class:
+
+```python
+class A:
+    def __init__(self, x: int) -> None:
+        self.x = x  # Aha, attribute 'x' of type 'int'
+
+a = A(1)
+a.x = 2  # OK!
+a.y = 3  # Error: "A" has no attribute "y"
+```
+
+<Info>
+This is similar to each class having an implicitly defined `__slots__` attribute. This is only enforced during type checking, not at runtime.
+</Info>
+
+## Explicit attribute annotations
+
+You can declare types of variables in the class body explicitly:
+
+<CodeGroup>
+```python Class body annotation
+class A:
+    x: list[int]  # Declare attribute 'x' of type list[int]
+
+a = A()
+a.x = [1]  # OK
+```
+
+```python Method annotation
+class A:
+    def __init__(self) -> None:
+        self.x: list[int] = []
+    
+    def f(self) -> None:
+        self.y: Any = 0
+```
+</CodeGroup>
+
+<Warning>
+You can only define an instance variable within a method if you assign to it explicitly using `self`:
+
+```python
+class A:
+    def __init__(self) -> None:
+        self.y = 1   # Define 'y'
+        a = self
+        a.x = 1      # Error: 'x' not defined
+```
+</Warning>
+
+## Annotating `__init__` methods
+
+The `__init__` method is special — it doesn't return a value. This is best expressed as `-> None`:
+
+```python
+class C1:
+    def __init__(self) -> None:
+        self.var = 42
+```
+
+You can omit the return type if at least one argument is annotated:
+
+```python
+class C2:
+    def __init__(self, arg: int):
+        self.var = arg
+```
+
+<Note>
+If `__init__` has no annotated arguments and no return type annotation, it is considered an untyped method and its body is not type checked.
+</Note>
+
+## Class attribute annotations
+
+Use `ClassVar[T]` to explicitly declare that an attribute should not be set on instances:
+
+```python
+from typing import ClassVar
+
+class A:
+    x: ClassVar[int] = 0  # Class variable only
+
+A.x += 1  # OK
+
+a = A()
+a.x = 1  # Error: Cannot assign to class variable "x" via instance
+print(a.x)  # OK -- can be read through an instance
+```
+
+<Info>
+An attribute without `ClassVar` annotation can be used as both a class and instance variable.
+</Info>
+
+## Overriding methods
+
+When overriding a statically typed method, mypy checks that the override has a compatible signature:
+
+<Steps>
+  <Step title="Compatible overrides">
+    ```python
+    class Base:
+        def f(self, x: int) -> None:
+            ...
+    
+    class Derived(Base):
+        def f(self, x: int) -> None:  # OK
+            ...
+    ```
+  </Step>
+  
+  <Step title="Incompatible parameter types">
+    ```python
+    class Derived(Base):
+        def f(self, x: str) -> None:  # Error: type of 'x' incompatible
+            ...
+    ```
+  </Step>
+  
+  <Step title="Accepting more arguments">
+    ```python
+    class Derived(Base):
+        def f(self, x: int, y: int = 0) -> None:  # OK
+            ...
+    ```
+  </Step>
+</Steps>
+
+<Note>
+You can vary return types covariantly and argument types contravariantly in overriding methods.
+</Note>
+
+## The `@override` decorator
+
+You can explicitly mark a method as overriding a base method using `@override`:
+
+```python
+from typing import override
+
+class Base:
+    def f(self, x: int) -> None:
+        ...
+
+class Derived(Base):
+    @override
+    def f(self, x: int) -> None:  # OK
+        ...
+    
+    @override
+    def g(self, y: str) -> None:  # Error: no corresponding base method found
+        ...
+```
+
+<Tip>
+Use `--enable-error-code explicit-override` to require that method overrides use the `@override` decorator.
+</Tip>
+
+## Abstract base classes
+
+Mypy supports Python abstract base classes (ABCs). Use `ABCMeta` metaclass and `@abstractmethod` decorator:
+
+```python
+from abc import ABCMeta, abstractmethod
+
+class Animal(metaclass=ABCMeta):
+    @abstractmethod
+    def eat(self, food: str) -> None:
+        pass
+    
+    @property
+    @abstractmethod
+    def can_walk(self) -> bool:
+        pass
+
+class Cat(Animal):
+    def eat(self, food: str) -> None:
+        ...  # Body omitted
+    
+    @property
+    def can_walk(self) -> bool:
+        return True
+
+x = Animal()  # Error: 'Animal' is abstract due to 'eat' and 'can_walk'
+y = Cat()     # OK
+```
+
+<Warning>
+Mypy performs checking for unimplemented abstract methods even if you omit the `ABCMeta` metaclass.
+</Warning>
+
+### Implicit abstract classes
+
+A class that inherits an abstract method but doesn't implement it is implicitly abstract:
+
+```python
+from abc import ABCMeta, abstractmethod
+
+class Base(metaclass=ABCMeta):
+    @abstractmethod
+    def f(self, x: int) -> None:
+        pass
+
+class Derived(Base):  # No error -- Derived is implicitly abstract
+    def g(self) -> None:
+        ...
+
+d = Derived()  # Error: 'Derived' is abstract
+```
+
+## Slots
+
+When a class has explicitly defined `__slots__`, mypy checks that all attributes assigned to are members of `__slots__`:
+
+```python
+class Album:
+    __slots__ = ('name', 'year')
+    
+    def __init__(self, name: str, year: int) -> None:
+        self.name = name
+        self.year = year
+        self.released = True  # Error: not in "__slots__"
+```
+
+Mypy checks `__slots__` when:
+
+1. All base classes (except builtin ones) have explicit `__slots__` defined
+2. `__slots__` does not include `__dict__`
+3. All values in `__slots__` are string literals
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Always declare instance attributes">
+    Either initialize them in `__init__` or declare them in the class body with type annotations.
+  </Accordion>
+  
+  <Accordion title="Use ClassVar for class-level constants">
+    This prevents accidental modification through instances and makes your intent clear.
+  </Accordion>
+  
+  <Accordion title="Use @override for clarity">
+    Explicitly marking overridden methods helps catch errors when base methods are renamed.
+  </Accordion>
+  
+  <Accordion title="Prefer ABCs for interfaces">
+    Abstract base classes make your interfaces explicit and help catch missing implementations.
+  </Accordion>
+</AccordionGroup>

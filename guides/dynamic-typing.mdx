@@ -1,0 +1,399 @@
+---
+title: Dynamically typed code
+description: Using Any and dynamic typing with mypy for flexible code
+---
+
+Sometimes your code is too dynamic for mypy to understand. In these cases, you can use the `Any` type to enable dynamic typing on a fine-grained basis.
+
+## The Any type
+
+Mypy will let you do basically anything with a value of type `Any`:
+
+```python
+from typing import Any
+
+num = 1         # Statically typed (inferred to be int)
+num = 'x'       # error: Incompatible types in assignment
+
+dyn: Any = 1    # Dynamically typed (type Any)
+dyn = 'x'       # OK - Any accepts anything
+
+num = dyn       # No error - you can assign Any to anything
+num += 1        # Oops, mypy still thinks num is an int
+```
+
+<Info>
+  Think of `Any` as a way to locally disable type checking.
+</Info>
+
+## Operations on Any values
+
+You can do anything with an `Any` value:
+
+```python
+def f(x: Any) -> int:
+    # All of these are valid!
+    x.foobar(1, y=2)
+    print(x[3] + 'f')
+    if x:
+        x.z = x(2)
+    open(x).read()
+    return x
+```
+
+Values derived from `Any` also have type `Any`:
+
+```python
+def f(x: Any) -> None:
+    y = x.foo()
+    reveal_type(y)  # Revealed type is "Any"
+    z = y.bar("mypy will let you do anything to y")
+    reveal_type(z)  # Revealed type is "Any"
+```
+
+<Warning>
+  `Any` types may propagate through your program, making type checking less effective.
+</Warning>
+
+## Sources of Any
+
+### Untyped function parameters
+
+Function parameters without annotations are implicitly `Any`:
+
+```python
+def f(x) -> None:
+    reveal_type(x)  # Revealed type is "Any"
+    x.can.do["anything", x]("wants", 2)
+```
+
+Use `--disallow-untyped-defs` to catch this:
+
+```bash
+mypy --disallow-untyped-defs myproject
+```
+
+### Generic types without parameters
+
+Generic types missing type parameters treat them as `Any`:
+
+```python
+from typing import List
+
+def process(items: List) -> None:  # List[Any]
+    reveal_type(items)  # list[Any]
+```
+
+### Missing imports
+
+Modules that can't be found are treated as `Any`:
+
+```python
+import some_missing_module  # Type is Any
+
+result = some_missing_module.func()  # result is Any
+```
+
+### Unannotated functions
+
+Functions without return type annotations may return `Any`:
+
+```python
+def get_value():  # Returns Any
+    return complex_computation()
+
+value = get_value()  # value is Any
+```
+
+## When to use Any
+
+### Highly dynamic code
+
+For code that's inherently dynamic:
+
+```python
+def load_plugin(name: str) -> Any:
+    """Load a plugin dynamically - return type varies."""
+    module = __import__(name)
+    return getattr(module, 'Plugin')()
+```
+
+### Gradual typing
+
+When adding types to existing code:
+
+```python
+def legacy_function(data: Any) -> dict:
+    # Will add proper types later
+    return transform(data)
+```
+
+### Working with third-party code
+
+When third-party libraries lack type information:
+
+```python
+from typing import Any
+import untyped_library
+
+def wrapper(data: dict) -> Any:
+    return untyped_library.process(data)
+```
+
+## Alternatives to Any
+
+### Use Union types
+
+Instead of `Any`, use `Union` when you know the possible types:
+
+```python
+from typing import Union
+
+# Bad
+def process(value: Any) -> Any:
+    return value
+
+# Better
+def process(value: Union[int, str]) -> Union[int, str]:
+    return value
+```
+
+### Use TypeVar for generic code
+
+```python
+from typing import TypeVar
+
+T = TypeVar('T')
+
+def first(items: list[T]) -> T:
+    return items[0]
+
+result = first([1, 2, 3])  # result is int, not Any
+```
+
+### Use Protocols for duck typing
+
+```python
+from typing import Protocol
+
+class Drawable(Protocol):
+    def draw(self) -> None: ...
+
+def render(obj: Drawable) -> None:
+    obj.draw()
+```
+
+### Use object for unknown types
+
+When you need a value but don't know its type:
+
+```python
+# Bad - too permissive
+def log(value: Any) -> None:
+    print(value)
+
+# Better - need to narrow before use
+def log(value: object) -> None:
+    print(value)  # OK - object has __str__
+    # value.some_method()  # Error - need to narrow first
+```
+
+## Disallowing Any
+
+Mypy provides options to restrict `Any`:
+
+### Disallow untyped definitions
+
+```bash
+mypy --disallow-untyped-defs myproject
+```
+
+Errors on functions without complete annotations.
+
+### Disallow Any generics
+
+```bash
+mypy --disallow-any-generics myproject
+```
+
+Errors on generic types without type parameters:
+
+```python
+from typing import List
+
+items: List = []  # Error
+items: List[int] = []  # OK
+```
+
+### Disallow subclassing Any
+
+```bash
+mypy --disallow-subclassing-any myproject
+```
+
+Prevents subclassing classes with unknown types:
+
+```python
+from some_module import BaseClass  # Type is Any
+
+class MyClass(BaseClass):  # Error
+    pass
+```
+
+### Warn on return Any
+
+```bash
+mypy --warn-return-any myproject
+```
+
+Warns when a function returns `Any`:
+
+```python
+def get_value() -> Any:  # Warning
+    return compute()
+```
+
+## Dealing with Any in practice
+
+### Narrow Any values
+
+Use type narrowing to make `Any` values safer:
+
+```python
+from typing import Any, cast
+
+def process(data: Any) -> int:
+    if isinstance(data, int):
+        return data  # data is int here
+    elif isinstance(data, str):
+        return int(data)  # Convert str to int
+    else:
+        raise TypeError(f"Expected int or str, got {type(data)}")
+```
+
+### Use cast sparingly
+
+```python
+from typing import Any, cast
+
+def get_value() -> Any:
+    return compute()
+
+# Tell mypy you know better
+value = cast(int, get_value())
+print(value + 1)  # OK
+```
+
+<Warning>
+  Casts are not checked at runtime - use only when you're certain:
+
+  ```python
+  value = cast(int, get_value())  # Might actually be str!
+  print(value + 1)  # Runtime error if value is str
+  ```
+</Warning>
+
+### Document Any usage
+
+```python
+def process_json(data: Any) -> dict:
+    """
+    Process JSON data.
+    
+    Args:
+        data: JSON-decoded data (Any because JSON structure varies)
+    
+    Returns:
+        Normalized dictionary
+    """
+    if not isinstance(data, dict):
+        raise TypeError("Expected dict")
+    return normalize(data)
+```
+
+## Configuration examples
+
+### Strict mode without Any
+
+```ini
+# mypy.ini
+[mypy]
+strict = True
+
+# This enables:
+# --disallow-any-generics
+# --disallow-subclassing-any
+# --disallow-untyped-defs
+# --disallow-incomplete-defs
+# --warn-return-any
+# and more
+```
+
+### Gradual strictness
+
+```ini
+# mypy.ini
+[mypy]
+warn_return_any = True
+
+# Strict for new code
+[mypy-newcode.*]
+strict = True
+
+# Relaxed for legacy code
+[mypy-legacy.*]
+allow_any_generics = True
+```
+
+## Any vs object
+
+<Tabs>
+  <Tab title="Any">
+    ```python
+    from typing import Any
+
+    def process(x: Any) -> None:
+        x.anything()  # OK - no checking
+        x[0]  # OK
+        x + x  # OK
+    ```
+
+    Use when you need maximum flexibility.
+  </Tab>
+
+  <Tab title="object">
+    ```python
+    def process(x: object) -> None:
+        x.anything()  # Error - object has limited methods
+        x[0]  # Error
+        x + x  # Error
+        str(x)  # OK - object has __str__
+    ```
+
+    Use when you want some type safety.
+  </Tab>
+</Tabs>
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Minimize Any" icon="compress">
+    Use the most specific type possible. Prefer `Union`, `TypeVar`, or `Protocol` over `Any`.
+  </Card>
+
+  <Card title="Document reasons" icon="comment">
+    Add comments explaining why `Any` is necessary in each case.
+  </Card>
+
+  <Card title="Narrow when possible" icon="filter">
+    Use `isinstance` checks to narrow `Any` to specific types.
+  </Card>
+
+  <Card title="Use strict mode" icon="lock">
+    Enable strict mode for new code to catch `Any` usage early.
+  </Card>
+</CardGroup>
+
+<Note>
+  While `Any` is useful for gradual typing and dynamic code, excessive use defeats the purpose of static type checking.
+</Note>

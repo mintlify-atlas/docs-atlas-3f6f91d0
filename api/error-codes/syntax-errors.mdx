@@ -1,0 +1,383 @@
+---
+title: Syntax error codes
+description: Error codes for syntax and parsing issues
+---
+
+Syntax errors are generated when Mypy encounters code that is not syntactically valid Python. These errors are often blocking and cannot be ignored with `# type: ignore` comments.
+
+## syntax
+
+Report syntax errors in Python code.
+
+```python
+SYNTAX = ErrorCode(
+    "syntax",
+    "Report syntax errors",
+    "General"
+)
+```
+
+### Description
+
+The `syntax` error code is used when Mypy's parser encounters code that violates Python's syntax rules. These errors must be fixed before type checking can proceed, as Mypy cannot analyze syntactically invalid code.
+
+### Characteristics
+
+<Warning>
+  Most syntax errors are **blocking errors** that cannot be ignored with `# type: ignore` comments. You must fix the syntax issue before Mypy can continue.
+</Warning>
+
+### Common causes
+
+#### Missing colons
+
+```python
+def greet(name: str)  # Error: invalid syntax  [syntax]
+    print(f"Hello, {name}")
+
+# Correct:
+def greet(name: str):
+    print(f"Hello, {name}")
+```
+
+#### Mismatched parentheses/brackets
+
+```python
+items = [1, 2, 3  # Error: invalid syntax  [syntax]
+
+# Correct:
+items = [1, 2, 3]
+```
+
+#### Invalid indentation
+
+```python
+def calculate():
+return 42  # Error: expected an indented block  [syntax]
+
+# Correct:
+def calculate():
+    return 42
+```
+
+#### Invalid operators
+
+```python
+x = 5
+y = 10
+result = x <> y  # Error: invalid syntax (Python 3 doesn't support <>)  [syntax]
+
+# Correct:
+result = x != y
+```
+
+#### Incorrect keyword usage
+
+```python
+class MyClass:
+    def method(self):
+        pass
+
+# Error: invalid syntax  [syntax]
+async = 5
+
+# 'async' is a keyword and cannot be used as a variable name
+```
+
+### Python version compatibility
+
+Syntax errors can occur when code uses features from a newer Python version than what Mypy is configured to check:
+
+```python
+# With --python-version 3.8
+
+# Error: invalid syntax  [syntax]
+# (Match statements require Python 3.10+)
+match value:
+    case 1:
+        print("one")
+    case _:
+        print("other")
+```
+
+To fix this, either:
+1. Update the Python version target: `mypy --python-version 3.10`
+2. Rewrite code to be compatible with the target version
+
+### F-string syntax errors
+
+```python
+name = "Alice"
+
+# Error: invalid syntax  [syntax]
+greeting = f"Hello {name"  # Missing closing brace
+
+# Correct:
+greeting = f"Hello {name}"
+```
+
+### Trailing comma errors
+
+```python
+# Error: invalid syntax  [syntax]  
+def func(
+    x: int,
+    y: int,,  # Double comma
+) -> int:
+    return x + y
+
+# Correct:
+def func(
+    x: int,
+    y: int,
+) -> int:
+    return x + y
+```
+
+### async/await syntax
+
+```python
+# Error: 'await' outside async function  [syntax]
+def regular_function():
+    result = await some_coroutine()
+    return result
+
+# Correct:
+async def async_function():
+    result = await some_coroutine()
+    return result
+```
+
+<Note>
+  For `await` outside coroutines specifically, Mypy also has dedicated error codes like `await-not-async` and `top-level-await`.
+</Note>
+
+### Annotation syntax errors
+
+```python
+# Error: invalid syntax  [syntax]
+def process(x: int |) -> None:  # Incomplete union
+    ...
+
+# Correct:
+def process(x: int | str) -> None:
+    ...
+```
+
+### Walrus operator syntax
+
+```python
+# With --python-version 3.7
+# Error: invalid syntax  [syntax]
+if (n := len(items)) > 5:  # Walrus operator requires Python 3.8+
+    print(f"Too many: {n}")
+
+# For Python 3.7, rewrite as:
+n = len(items)
+if n > 5:
+    print(f"Too many: {n}")
+```
+
+## Related error codes
+
+While `syntax` is the main error code for syntax errors, these related codes catch specific syntax-related issues:
+
+### top-level-await
+
+Warn about top-level await expressions.
+
+```python
+TOP_LEVEL_AWAIT = ErrorCode(
+    "top-level-await",
+    "Warn about top level await expressions",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+async def fetch_data():
+    return "data"
+
+# Error: "await" outside function  [top-level-await]
+result = await fetch_data()
+```
+
+<Note>
+  This error can be disabled in environments like IPython where top-level await is supported:
+  ```bash
+  mypy --disable-error-code=top-level-await
+  ```
+</Note>
+
+### await-not-async
+
+Warn about await outside coroutines.
+
+```python
+AWAIT_NOT_ASYNC = ErrorCode(
+    "await-not-async",
+    'Warn about "await" outside coroutine ("async def")',
+    "General"
+)
+```
+
+**Example:**
+
+```python
+async def get_value():
+    return 42
+
+def regular_func():
+    # Error: "await" outside coroutine ("async def")  [await-not-async]
+    x = await get_value()
+    return x
+
+# Correct:
+async def async_func():
+    x = await get_value()
+    return x
+```
+
+## Debugging syntax errors
+
+### Check Python version compatibility
+
+```bash
+# Specify Python version explicitly
+mypy --python-version 3.9 myfile.py
+
+# Or in mypy.ini:
+# [mypy]
+# python_version = 3.9
+```
+
+### Use a Python linter
+
+Linters can catch syntax errors before running Mypy:
+
+```bash
+# Using ruff
+ruff check myfile.py
+
+# Using flake8
+flake8 myfile.py
+
+# Using pylint
+pylint myfile.py
+```
+
+### Check with Python directly
+
+```bash
+# Try to compile the file
+python -m py_compile myfile.py
+
+# Or import it
+python -c "import myfile"
+```
+
+### Use an IDE with syntax highlighting
+
+Most modern Python IDEs will highlight syntax errors in real-time:
+- VS Code with Pylance
+- PyCharm
+- Sublime Text with Python packages
+- Vim/Neovim with LSP
+
+## Common patterns
+
+### Multi-line statements
+
+```python
+# Error: invalid syntax  [syntax]
+result = (
+    very_long_function_name(
+        argument1,
+        argument2,
+    )
+    + another_function()  # Needs explicit line continuation or parentheses
+)
+
+# Correct - implicit line continuation in parentheses:
+result = (
+    very_long_function_name(
+        argument1,
+        argument2,
+    )
+    + another_function()
+)
+```
+
+### Dictionary comprehensions
+
+```python
+# Error: invalid syntax  [syntax]
+data = {x: y for x, y in items if x > 0 if y < 100}  # Missing comma
+
+# Correct:
+data = {x: y for x, y in items if x > 0 and y < 100}
+```
+
+### Type annotation syntax
+
+```python
+from typing import Optional
+
+# Error: invalid syntax  [syntax]
+def process(value: Optional[int] = None) -> Optional[int]:
+    return value
+
+# This is actually valid! The error would be something else.
+# Common actual syntax error:
+def process(value: Optional[int] =) -> Optional[int]:  # Missing default value
+    return value
+```
+
+## Best practices
+
+### Enable syntax checking in your editor
+
+Configure your editor to show syntax errors immediately:
+
+```json
+// VS Code settings.json
+{
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": true
+}
+```
+
+### Use pre-commit hooks
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+```
+
+### Run syntax checks before type checking
+
+```bash
+#!/bin/bash
+# check.sh
+
+echo "Checking syntax..."
+python -m py_compile src/**/*.py || exit 1
+
+echo "Running type checker..."
+mypy src/
+```
+
+## See also
+
+- [Error codes overview](/api/error-codes/overview) - Error code system
+- [Type errors](/api/error-codes/type-errors) - Type checking error codes
+- [Other errors](/api/error-codes/other-errors) - Import and definition errors
+- [Configuration](/configuration) - Mypy configuration options

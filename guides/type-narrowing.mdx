@@ -1,0 +1,361 @@
+---
+title: Type narrowing
+description: Techniques for narrowing types from broad to specific in mypy
+---
+
+Type narrowing is when you convince the type checker that a broader type is actually more specific. For instance, an object of type `Shape` might actually be of the narrower type `Square`.
+
+## Type narrowing expressions
+
+The simplest way to narrow a type is to use one of the supported expressions:
+
+### isinstance checks
+
+```python
+def process(obj: object) -> None:
+    if isinstance(obj, int):
+        # Type is narrowed to int within this branch
+        reveal_type(obj)  # Revealed type: "builtins.int"
+        print(obj + 1)  # OK
+```
+
+### Multiple type checks
+
+```python
+def function(arg: object):
+    if isinstance(arg, int):
+        reveal_type(arg)  # Revealed type: "builtins.int"
+    elif isinstance(arg, str) or isinstance(arg, bool):
+        reveal_type(arg)  # Revealed type: "builtins.str | builtins.bool"
+        
+        # Subsequent narrowing
+        if isinstance(arg, bool):
+            reveal_type(arg)  # Revealed type: "builtins.bool"
+    
+    # Outside branches, type isn't narrowed
+    reveal_type(arg)  # Revealed type: "builtins.object"
+```
+
+### issubclass checks
+
+```python
+def process_class(cls: type) -> None:
+    if issubclass(cls, MyClass):
+        # cls is narrowed to Type[MyClass]
+        instance = cls()  # instance is MyClass
+```
+
+### type checks
+
+```python
+def process(obj: int | str) -> None:
+    if type(obj) is int:
+        reveal_type(obj)  # Revealed type: "builtins.int"
+```
+
+<Note>
+  `type(obj) is int` is more restrictive than `isinstance(obj, int)` - it doesn't match subclasses.
+</Note>
+
+### callable checks
+
+```python
+from collections.abc import Callable
+
+def process(obj: object) -> None:
+    if callable(obj):
+        # obj is narrowed to callable type
+        result = obj()  # OK
+```
+
+### None checks
+
+```python
+def greet(name: str | None) -> None:
+    if name is not None:
+        # name is narrowed to str
+        print(name.upper())  # OK
+```
+
+## Contextual narrowing
+
+Type narrowing is contextual and only applies within the appropriate scope:
+
+```python
+def function(arg: int | str):
+    if isinstance(arg, int):
+        return
+    
+    # arg can't be int at this point
+    reveal_type(arg)  # Revealed type: "builtins.str"
+```
+
+This works with `return`, `raise`, `break`, `continue`, and other control flow:
+
+```python
+def process(value: int | None) -> int:
+    if value is None:
+        raise ValueError("value cannot be None")
+    
+    # value is narrowed to int here
+    return value * 2
+```
+
+## Assert narrowing
+
+Use `assert` to narrow types:
+
+```python
+from typing import Any
+
+def process(arg: Any) -> None:
+    assert isinstance(arg, int)
+    reveal_type(arg)  # Revealed type: "builtins.int"
+    print(arg + 1)  # OK
+```
+
+<Warning>
+  With `--warn-unreachable`, narrowing to impossible states will be an error:
+
+  ```python
+  def function(arg: int):
+      # error: Subclass of "int" and "str" cannot exist
+      if isinstance(arg, int) and isinstance(arg, str):
+          pass
+  ```
+</Warning>
+
+## Type casts
+
+When mypy can't infer the correct type, use `cast()`:
+
+```python
+from typing import cast
+
+def get_value() -> object:
+    return "hello"
+
+value = cast(str, get_value())
+print(value.upper())  # OK, mypy trusts the cast
+```
+
+<Warning>
+  Casts are not checked at runtime. Use with caution:
+
+  ```python
+  value = cast(str, get_value())  # Could actually be int!
+  print(value.upper())  # Runtime error if value is not str
+  ```
+</Warning>
+
+## Type guards
+
+Create custom type narrowing functions using `TypeGuard`:
+
+```python
+from typing import TypeGuard
+
+def is_str_list(val: list[object]) -> TypeGuard[list[str]]:
+    """Check if all elements are strings."""
+    return all(isinstance(x, str) for x in val)
+
+def process(items: list[object]) -> None:
+    if is_str_list(items):
+        # items is narrowed to list[str]
+        for item in items:
+            print(item.upper())  # OK
+```
+
+### User-defined type guards
+
+```python
+from typing import TypeGuard
+
+class User:
+    name: str
+
+class Admin(User):
+    privileges: list[str]
+
+def is_admin(user: User) -> TypeGuard[Admin]:
+    return isinstance(user, Admin)
+
+def process_user(user: User) -> None:
+    if is_admin(user):
+        # user is narrowed to Admin
+        print(user.privileges)  # OK
+    else:
+        print(user.name)  # Still User
+```
+
+## TypeIs (PEP 742)
+
+Python 3.13+ introduces `TypeIs` for more precise narrowing:
+
+```python
+from typing import TypeIs
+
+def is_int(x: object) -> TypeIs[int]:
+    return isinstance(x, int)
+
+def process(x: int | str) -> None:
+    if is_int(x):
+        reveal_type(x)  # int
+    else:
+        reveal_type(x)  # str (narrowed in else branch too)
+```
+
+<Info>
+  `TypeIs` differs from `TypeGuard` by narrowing the type in both branches.
+</Info>
+
+## Narrowing with in operator
+
+```python
+from typing import Literal
+
+def process(mode: str) -> None:
+    if mode in ("read", "write"):
+        # mode is narrowed to Literal["read", "write"]
+        reveal_type(mode)  # Literal["read", "write"]
+```
+
+## Narrowing with match statements
+
+Python 3.10+ pattern matching narrows types:
+
+```python
+def process(value: int | str | list) -> None:
+    match value:
+        case int(x):
+            reveal_type(x)  # int
+        case str(s):
+            reveal_type(s)  # str
+        case [*items]:
+            reveal_type(items)  # list[int | str | list[Any]]
+```
+
+### Literal patterns
+
+```python
+from typing import Literal
+
+def process(status: Literal["ok", "error", "pending"]) -> None:
+    match status:
+        case "ok":
+            reveal_type(status)  # Literal["ok"]
+        case "error":
+            reveal_type(status)  # Literal["error"]
+        case "pending":
+            reveal_type(status)  # Literal["pending"]
+```
+
+## Tagged unions
+
+Use discriminated unions with literal types:
+
+```python
+from typing import Literal, Union
+from dataclasses import dataclass
+
+@dataclass
+class Success:
+    kind: Literal["success"]
+    value: int
+
+@dataclass
+class Error:
+    kind: Literal["error"]
+    message: str
+
+Result = Union[Success, Error]
+
+def process(result: Result) -> None:
+    if result.kind == "success":
+        # result is narrowed to Success
+        print(result.value)  # OK
+    else:
+        # result is narrowed to Error
+        print(result.message)  # OK
+```
+
+## Exhaustiveness checking
+
+Mypy can verify you've handled all cases:
+
+```python
+from typing import Literal, assert_never
+
+Mode = Literal["read", "write", "append"]
+
+def process(mode: Mode) -> None:
+    if mode == "read":
+        print("Reading")
+    elif mode == "write":
+        print("Writing")
+    elif mode == "append":
+        print("Appending")
+    else:
+        assert_never(mode)  # Ensures all cases covered
+```
+
+If you add a new mode to the Literal, mypy will error at the `assert_never` call.
+
+## Negative narrowing
+
+Mypy understands negative checks:
+
+```python
+def process(x: int | str) -> None:
+    if not isinstance(x, int):
+        # x is narrowed to str
+        reveal_type(x)  # str
+```
+
+## Narrowing with hasattr
+
+```python
+from typing import Protocol
+
+class HasName(Protocol):
+    name: str
+
+def process(obj: object) -> None:
+    if hasattr(obj, "name"):
+        # Limited narrowing - mypy doesn't automatically infer
+        # Use cast or TypeGuard for better results
+        print(cast(HasName, obj).name)
+```
+
+<Tip>
+  For more precise narrowing with `hasattr`, use a TypeGuard:
+
+  ```python
+  def has_name(obj: object) -> TypeGuard[HasName]:
+      return hasattr(obj, "name")
+  ```
+</Tip>
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use isinstance" icon="check">
+    Prefer `isinstance()` over type comparisons for better narrowing
+  </Card>
+
+  <Card title="Check early" icon="arrow-up">
+    Perform type checks early in functions to narrow types throughout
+  </Card>
+
+  <Card title="Avoid Any" icon="ban">
+    `Any` defeats narrowing - use specific types or TypeGuard
+  </Card>
+
+  <Card title="Use TypeGuard" icon="shield">
+    Create reusable type guards for complex validation logic
+  </Card>
+</CardGroup>
+
+<Note>
+  Type narrowing makes your code both safer and more readable by making type relationships explicit.
+</Note>

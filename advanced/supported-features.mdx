@@ -1,0 +1,233 @@
+---
+title: Supported Python features
+description: Overview of Python features supported by mypy and common limitations
+---
+
+## Feature support overview
+
+Mypy supports most Python features, but some dynamic patterns have limitations. For a comprehensive list of unsupported features, see:
+
+<Info>
+[Unsupported Python features](https://github.com/python/mypy/wiki/Unsupported-Python-Features) on the mypy wiki
+</Info>
+
+## Runtime definition of methods and functions
+
+By default, mypy will report errors if you add functions or methods to classes/modules outside their definition.
+
+### Example issue
+
+```python
+class MyClass:
+    pass
+
+# This will cause a type checking error
+MyClass.new_method = lambda self: print("dynamic method")
+
+obj = MyClass()
+obj.new_method()  # Mypy doesn't know about this method
+```
+
+<Warning>
+Mypy only complains if the dynamic definition is **visible to the type checker**. Runtime-only modifications may not be caught.
+</Warning>
+
+### Workarounds
+
+You can work around this limitation in several ways:
+
+<Steps>
+
+### Use dynamic typing
+
+```python
+from typing import Any
+
+class MyClass:
+    pass
+
+obj: Any = MyClass()
+obj.new_method()  # OK, Any bypasses type checking
+```
+
+### Use setattr
+
+```python
+class MyClass:
+    pass
+
+def new_method(self) -> None:
+    print("dynamic method")
+
+setattr(MyClass, "new_method", new_method)
+
+obj = MyClass()
+obj.new_method()  # Mypy won't see this at type-check time
+```
+
+### Use cast
+
+```python
+from typing import cast, Protocol
+
+class HasNewMethod(Protocol):
+    def new_method(self) -> None: ...
+
+class MyClass:
+    pass
+
+MyClass.new_method = lambda self: print("dynamic method")
+
+obj = cast(HasNewMethod, MyClass())
+obj.new_method()  # OK
+```
+
+### Declare in stub file
+
+Create a `.pyi` stub file:
+
+```python mymodule.pyi
+class MyClass:
+    def new_method(self) -> None: ...
+```
+
+</Steps>
+
+<Tip>
+If you use dynamic features extensively, consider using protocols or stub files to maintain type safety.
+</Tip>
+
+## Important considerations
+
+### Static vs. runtime checking
+
+<Note>
+Mypy performs **static** type checking only. It doesn't add any runtime type checks to your code.
+</Note>
+
+This means:
+
+- Dynamic attribute assignment works at runtime
+- Mypy just won't be able to type-check it
+- You need to be more careful to avoid runtime errors
+
+### Best practices
+
+When using dynamic features:
+
+```python
+from typing import Any
+
+class DynamicClass:
+    """A class with dynamically added methods."""
+    
+    def __init__(self) -> None:
+        self.data: dict[str, Any] = {}
+    
+    def __getattr__(self, name: str) -> Any:
+        # Allow dynamic attribute access
+        return self.data.get(name)
+    
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Allow dynamic attribute assignment
+        if name == "data":
+            super().__setattr__(name, value)
+        else:
+            self.data[name] = value
+```
+
+<Warning>
+**Risks of dynamic features:**
+
+- Type checker can't verify correctness
+- IDE autocomplete won't work
+- Refactoring tools may miss dynamic references
+- Runtime errors are more likely
+</Warning>
+
+## Recommended approaches
+
+### For libraries
+
+If you're writing a library that uses metaprogramming:
+
+1. **Provide type stubs** (`.pyi` files) describing the final API
+2. **Write a mypy plugin** to help type-check usage
+3. **Document** which features mypy can and can't verify
+
+### For applications
+
+If you're writing application code:
+
+1. **Avoid dynamic features** when possible
+2. **Use protocols** to describe dynamic interfaces
+3. **Isolate dynamic code** to specific modules
+4. **Use `# type: ignore`** sparingly for known dynamic patterns
+
+### Example: Controlled dynamic behavior
+
+```python
+from typing import Protocol, Any
+
+class PluginInterface(Protocol):
+    """All plugins must implement this interface."""
+    def process(self, data: str) -> str: ...
+
+class PluginRegistry:
+    def __init__(self) -> None:
+        self._plugins: dict[str, PluginInterface] = {}
+    
+    def register(self, name: str, plugin: PluginInterface) -> None:
+        """Register a plugin. Type-checked!"""
+        self._plugins[name] = plugin
+    
+    def get(self, name: str) -> PluginInterface | None:
+        """Get a plugin by name."""
+        return self._plugins.get(name)
+
+# Usage
+class MyPlugin:
+    def process(self, data: str) -> str:
+        return data.upper()
+
+registry = PluginRegistry()
+registry.register("my_plugin", MyPlugin())  # Type-checked!
+```
+
+<Info>
+This pattern provides runtime flexibility while maintaining type safety.
+</Info>
+
+## Performance considerations
+
+Mypy's static analysis performs no runtime checks:
+
+```python
+def process(x: int) -> int:
+    return x * 2
+
+# At runtime, this works (no type checking)
+result = process("hello" * 2)  # Mypy error, but runs
+
+# To get runtime checking, use other tools:
+from typing import runtime_checkable
+```
+
+<Note>
+For runtime type checking, consider libraries like:
+- `pydantic` for data validation
+- `typeguard` for runtime type checking
+- `beartype` for zero-overhead runtime checks
+</Note>
+
+## Additional resources
+
+For more information:
+
+- [Mypy issue tracker](https://github.com/python/mypy/issues) - Report bugs and feature requests
+- [Typing discussions](https://github.com/python/typing/discussions) - Python typing questions
+- [Mypy wiki](https://github.com/python/mypy/wiki) - Additional documentation
+
+<Tip>
+Join the [Python typing Gitter chat](https://gitter.im/python/typing) to discuss typing challenges and solutions.
+</Tip>

@@ -1,0 +1,329 @@
+---
+title: Error codes overview
+description: Understanding Mypy's error classification system
+---
+
+Mypy uses error codes to classify different types of errors. This allows you to enable or disable specific error checks and apply granular `# type: ignore` comments.
+
+## Error code structure
+
+### ErrorCode class
+
+Each error code in Mypy is represented by an `ErrorCode` instance defined in `mypy.errorcodes`.
+
+```python
+class ErrorCode:
+    def __init__(
+        self,
+        code: str,
+        description: str,
+        category: str,
+        default_enabled: bool = True,
+        sub_code_of: ErrorCode | None = None,
+    ) -> None:
+        self.code = code
+        self.description = description
+        self.category = category
+        self.default_enabled = default_enabled
+        self.sub_code_of = sub_code_of
+```
+
+<ParamField path="code" type="str" required>
+  The error code identifier (e.g., `"attr-defined"`, `"type-arg"`)
+</ParamField>
+
+<ParamField path="description" type="str" required>
+  Human-readable description of what this error checks
+</ParamField>
+
+<ParamField path="category" type="str" required>
+  Category of the error (currently always `"General"`)
+</ParamField>
+
+<ParamField path="default_enabled" type="bool" default="True">
+  Whether this error code is enabled by default
+</ParamField>
+
+<ParamField path="sub_code_of" type="ErrorCode | None">
+  Parent error code if this is a more specific variant
+</ParamField>
+
+## Error code categories
+
+Mypy's error codes fall into several categories:
+
+### Type errors
+
+Errors related to type incompatibilities and type checking:
+
+- `attr-defined` - Attribute existence checks
+- `arg-type` - Argument type mismatches
+- `return-value` - Return type mismatches
+- `assignment` - Assignment type mismatches
+- `override` - Method override compatibility
+
+[View all type error codes →](/api/error-codes/type-errors)
+
+### Syntax errors
+
+Errors related to Python syntax:
+
+- `syntax` - Syntax errors in Python code
+
+[View syntax error codes →](/api/error-codes/syntax-errors)
+
+### Other errors
+
+Import errors, definition errors, and other checks:
+
+- `import-not-found` - Missing imports
+- `name-defined` - Undefined names
+- `no-redef` - Duplicate definitions
+
+[View other error codes →](/api/error-codes/other-errors)
+
+## Using error codes
+
+### In type: ignore comments
+
+Specify which errors to ignore:
+
+```python
+from typing import Any
+
+x: int = "hello"  # type: ignore[assignment]
+y: Any = some_func()  # type: ignore[no-any-return]
+```
+
+### Enable/disable error codes
+
+Use command-line flags or config file:
+
+```bash
+# Enable specific error codes
+mypy --enable-error-code=truthy-bool,unused-awaitable src/
+
+# Disable specific error codes
+mypy --disable-error-code=misc src/
+```
+
+In `mypy.ini`:
+
+```ini
+[mypy]
+enable_error_code = truthy-bool, unused-awaitable
+disable_error_code = misc
+```
+
+### Per-module configuration
+
+```ini
+[mypy]
+
+[mypy-tests.*]
+disable_error_code = no-untyped-def
+```
+
+## Error code hierarchy
+
+Some error codes have sub-codes for more specific cases:
+
+<CodeGroup>
+```python Parent and sub-codes
+# Parent code
+ASSIGNMENT = ErrorCode(
+    "assignment",
+    "Check that assigned value is compatible with target",
+    "General"
+)
+
+# Sub-code
+METHOD_ASSIGN = ErrorCode(
+    "method-assign",
+    "Check that assignment target is not a method",
+    "General",
+    sub_code_of=ASSIGNMENT,
+)
+```
+</CodeGroup>
+
+When you ignore a parent code, all sub-codes are also ignored:
+
+```python
+# Ignores both assignment and method-assign
+x.method = func  # type: ignore[assignment]
+```
+
+## Default vs optional error codes
+
+### Enabled by default
+
+Most error codes are enabled by default:
+
+```python
+ATTR_DEFINED = ErrorCode(
+    "attr-defined",
+    "Check that attribute exists",
+    "General",
+    default_enabled=True,  # Default
+)
+```
+
+### Disabled by default
+
+Some stricter checks require opt-in:
+
+```python
+NO_UNTYPED_DEF = ErrorCode(
+    "no-untyped-def",
+    "Check that every function has an annotation",
+    "General",
+    default_enabled=False,
+)
+```
+
+Enable with:
+
+```bash
+mypy --disallow-untyped-defs  # Enables no-untyped-def
+# or
+mypy --enable-error-code=no-untyped-def
+```
+
+## Accessing error codes programmatically
+
+### Get all error codes
+
+```python
+from mypy.errorcodes import error_codes
+
+for code_name, error_code in error_codes.items():
+    print(f"{code_name}: {error_code.description}")
+```
+
+### Check if a code is enabled
+
+```python
+from mypy.errorcodes import ATTR_DEFINED
+from mypy.options import Options
+
+options = Options()
+if ATTR_DEFINED not in options.disabled_error_codes:
+    print("attr-defined is enabled")
+```
+
+### Sub-code mapping
+
+```python
+from mypy.errorcodes import sub_code_map, ASSIGNMENT
+
+# Get all sub-codes of a parent
+for sub_code in sub_code_map[ASSIGNMENT.code]:
+    print(f"Sub-code of assignment: {sub_code}")
+# Output: "Sub-code of assignment: method-assign"
+```
+
+## Common error codes
+
+Here are the most frequently encountered error codes:
+
+<CardGroup cols={2}>
+  <Card title="attr-defined" icon="check">
+    Check that attributes exist on objects
+  </Card>
+  <Card title="name-defined" icon="text">
+    Check that names are defined before use
+  </Card>
+  <Card title="arg-type" icon="brackets-curly">
+    Check argument types in function calls
+  </Card>
+  <Card title="return-value" icon="reply">
+    Check return value matches function signature
+  </Card>
+  <Card title="assignment" icon="equals">
+    Check assignment type compatibility
+  </Card>
+  <Card title="import-not-found" icon="file-import">
+    Check that imports can be resolved
+  </Card>
+</CardGroup>
+
+## Error code reference
+
+### All error codes list
+
+Mypy defines over 60 error codes. They are documented in detail across these pages:
+
+<CardGroup cols={3}>
+  <Card title="Type errors" icon="code" href="/api/error-codes/type-errors">
+    Type checking error codes
+  </Card>
+  <Card title="Syntax errors" icon="file-code" href="/api/error-codes/syntax-errors">
+    Syntax and parsing errors
+  </Card>
+  <Card title="Other errors" icon="list" href="/api/error-codes/other-errors">
+    Import, definition, and other errors
+  </Card>
+</CardGroup>
+
+## Special error codes
+
+### misc
+
+The catch-all error code for various uncategorized checks:
+
+```python
+MISC = ErrorCode("misc", "Miscellaneous other checks", "General")
+```
+
+<Warning>
+  Future Mypy versions will add more specific error codes to replace some `misc` errors.
+</Warning>
+
+### syntax
+
+Syntax errors are often blocking (cannot be ignored):
+
+```python
+SYNTAX = ErrorCode("syntax", "Report syntax errors", "General")
+```
+
+## Best practices
+
+### Use specific error codes
+
+```python
+# Good - specific
+x = 1
+y = "hello"
+result = x + y  # type: ignore[operator]
+
+# Avoid - too broad  
+result = x + y  # type: ignore
+```
+
+### Enable strict optional checks
+
+```ini
+[mypy]
+enable_error_code = (
+    truthy-bool,
+    redundant-expr,
+    unused-awaitable,
+    ignore-without-code,
+)
+```
+
+### Document ignored errors
+
+```python
+# type: ignore[attr-defined]  # TODO: Fix after API update
+obj.new_attribute = value
+```
+
+## See also
+
+- [Type error codes](/api/error-codes/type-errors) - Type checking errors
+- [Syntax error codes](/api/error-codes/syntax-errors) - Syntax errors  
+- [Other error codes](/api/error-codes/other-errors) - Import and definition errors
+- [Configuration](/configuration) - How to configure error codes

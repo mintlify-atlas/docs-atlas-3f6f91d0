@@ -1,0 +1,225 @@
+---
+title: Metaclasses
+description: Learn how to use metaclasses with Mypy's type system.
+---
+
+## What are metaclasses?
+
+A metaclass is a class that describes the construction and behavior of other classes, similarly to how classes describe the construction and behavior of objects.
+
+The default metaclass is `type`, but it's possible to use other metaclasses. Metaclasses allow you to create "a different kind of class", such as Enums, NamedTuples, and singletons.
+
+<Info>
+Mypy has special understanding of `ABCMeta` and `EnumMeta`.
+</Info>
+
+## Defining a metaclass
+
+```python
+class M(type):
+    pass
+
+class A(metaclass=M):
+    pass
+```
+
+## Metaclass usage example
+
+Mypy supports the lookup of attributes in the metaclass:
+
+```python
+from typing import ClassVar, TypeVar
+
+S = TypeVar("S")
+
+class M(type):
+    count: ClassVar[int] = 0
+    
+    def make(cls: type[S]) -> S:
+        M.count += 1
+        return cls()
+
+class A(metaclass=M):
+    pass
+
+a: A = A.make()  # make() is looked up at M; result is object of type A
+print(A.count)
+
+class B(A):
+    pass
+
+b: B = B.make()  # Metaclasses are inherited
+print(B.count + " objects created")  # Error: Unsupported operand types
+```
+
+<Note>
+The `make()` method is defined on the metaclass `M` and can be called on class `A` itself (not on instances of `A`).
+</Note>
+
+## Metaclass conflicts
+
+Metaclasses pose requirements on the inheritance structure:
+
+<Tabs>
+  <Tab title="Conflicting metaclasses">
+    ```python
+    class M1(type): pass
+    class M2(type): pass
+    
+    class A1(metaclass=M1): pass
+    class A2(metaclass=M2): pass
+    
+    class B1(A1, metaclass=M2): pass  # Error: metaclass conflict
+    class B12(A1, A2): pass  # Error: metaclass conflict
+    ```
+  </Tab>
+  
+  <Tab title="Solution: Common metaclass">
+    ```python
+    class M1(type): pass
+    class M2(type): pass
+    
+    class A1(metaclass=M1): pass
+    class A2(metaclass=M2): pass
+    
+    class CorrectMeta(M1, M2): pass
+    class B2(A1, A2, metaclass=CorrectMeta): pass  # OK
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+At runtime, the above conflicting definitions raise:
+```
+TypeError: metaclass conflict: the metaclass of a derived class
+must be a (non-strict) subclass of the metaclasses of all its bases
+```
+</Warning>
+
+## Limitations
+
+Mypy has several limitations when working with metaclasses:
+
+<AccordionGroup>
+  <Accordion title="No dynamic metaclasses">
+    Mypy does not understand dynamically-computed metaclasses:
+    
+    ```python
+    class A(metaclass=f()): ...  # Not supported
+    ```
+  </Accordion>
+  
+  <Accordion title="No arbitrary metaclass code">
+    Mypy does not and cannot understand arbitrary metaclass code. Only simple, straightforward metaclasses are supported.
+  </Accordion>
+  
+  <Accordion title="Only type subclasses">
+    Mypy only recognizes subclasses of `type` as potential metaclasses.
+  </Accordion>
+  
+  <Accordion title="Self not allowed">
+    `Self` is not allowed as an annotation in metaclasses as per PEP 673.
+  </Accordion>
+</AccordionGroup>
+
+## Working around builtin type issues
+
+For some builtin types, mypy may think their metaclass is `ABCMeta` even if it's `type` at runtime:
+
+<Tabs>
+  <Tab title="The problem">
+    ```python
+    import abc
+    
+    assert type(tuple) is type  # True at runtime
+    
+    class M0(type): pass
+    class A0(tuple, metaclass=M0): pass  # Mypy Error: metaclass conflict
+    ```
+  </Tab>
+  
+  <Tab title="Option 1: Use ABCMeta">
+    ```python
+    import abc
+    
+    class M1(abc.ABCMeta): pass
+    class A1(tuple, metaclass=M1): pass  # OK
+    ```
+  </Tab>
+  
+  <Tab title="Option 2: type: ignore">
+    ```python
+    class M2(type): pass
+    class A2(tuple, metaclass=M2): pass  # type: ignore[metaclass]
+    ```
+  </Tab>
+</Tabs>
+
+## Common metaclass patterns
+
+### Singleton pattern
+
+```python
+class Singleton(type):
+    _instances: dict[type, object] = {}
+    
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+class Database(metaclass=Singleton):
+    def __init__(self) -> None:
+        self.connected = False
+
+db1 = Database()
+db2 = Database()
+assert db1 is db2  # True
+```
+
+### Registry pattern
+
+```python
+from typing import ClassVar
+
+class RegistryMeta(type):
+    registry: ClassVar[dict[str, type]] = {}
+    
+    def __new__(mcs, name, bases, attrs):
+        cls = super().__new__(mcs, name, bases, attrs)
+        if name != 'Plugin':  # Don't register the base class
+            RegistryMeta.registry[name] = cls
+        return cls
+
+class Plugin(metaclass=RegistryMeta):
+    pass
+
+class JSONPlugin(Plugin):
+    pass
+
+class XMLPlugin(Plugin):
+    pass
+
+print(RegistryMeta.registry)
+# {'JSONPlugin': <class 'JSONPlugin'>, 'XMLPlugin': <class 'XMLPlugin'>}
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Avoid mixing metaclasses">
+    It's better not to combine metaclasses and complex class hierarchies. Keep inheritance simple when using metaclasses.
+  </Accordion>
+  
+  <Accordion title="Use ABCMeta when appropriate">
+    If you need both abstract base classes and custom metaclass behavior, inherit from `ABCMeta` instead of `type`.
+  </Accordion>
+  
+  <Accordion title="Document metaclass behavior">
+    Metaclasses can be confusing. Add clear documentation explaining what your metaclass does and why it's needed.
+  </Accordion>
+  
+  <Accordion title="Consider alternatives">
+    Before using metaclasses, consider if class decorators or `__init_subclass__` would work better for your use case.
+  </Accordion>
+</AccordionGroup>

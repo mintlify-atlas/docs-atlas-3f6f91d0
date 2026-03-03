@@ -1,0 +1,541 @@
+---
+title: Error code configuration
+description: Configure and manage Mypy error codes for fine-grained type checking control
+---
+
+Mypy can display error codes like `[attr-defined]` after each error message. Error codes allow you to selectively silence or enable specific types of errors.
+
+## Understanding error codes
+
+Error codes serve two main purposes:
+
+<CardGroup cols={2}>
+  <Card title="Selective silencing" icon="filter">
+    Use `# type: ignore[code]` to ignore specific errors without suppressing other important errors.
+  </Card>
+  <Card title="Documentation" icon="book">
+    Error codes link to documentation explaining why the error occurred and how to fix it.
+  </Card>
+</CardGroup>
+
+## Displaying error codes
+
+By default, error codes are shown in error messages:
+
+```bash
+mypy program.py
+```
+
+```text
+program.py:12: error: "str" has no attribute "append"  [attr-defined]
+program.py:15: error: Argument 1 to "process" has incompatible type "int"; expected "str"  [arg-type]
+```
+
+To hide error codes:
+
+```bash
+mypy --hide-error-codes program.py
+```
+
+To show documentation links:
+
+```bash
+mypy --show-error-code-links program.py
+```
+
+## Silencing specific error codes
+
+### Per-line silencing
+
+Use `# type: ignore[code]` to silence specific errors on a line:
+
+<CodeGroup>
+
+```python Single error code
+from foolib import foo  # type: ignore[attr-defined]
+```
+
+```python Multiple error codes
+result = process(data)  # type: ignore[arg-type, return-value]
+```
+
+```python With explanation
+value = legacy_api()  # type: ignore[no-untyped-call]  # TODO: Add types upstream
+```
+
+</CodeGroup>
+
+<Warning>
+Avoid using `# type: ignore` without error codes, as it suppresses all errors on that line.
+</Warning>
+
+### Global enabling/disabling
+
+Use command-line flags to enable or disable error codes globally:
+
+```bash
+# Enable optional error codes
+mypy --enable-error-code truthy-bool,ignore-without-code src/
+
+# Disable specific error codes
+mypy --disable-error-code misc,no-untyped-def src/
+```
+
+In configuration files:
+
+<CodeGroup>
+
+```ini mypy.ini
+[mypy]
+enable_error_code = truthy-bool, ignore-without-code, unused-awaitable
+disable_error_code = misc
+```
+
+```toml pyproject.toml
+[tool.mypy]
+enable_error_code = ["truthy-bool", "ignore-without-code", "unused-awaitable"]
+disable_error_code = ["misc"]
+```
+
+</CodeGroup>
+
+### Per-module configuration
+
+Configure error codes for specific modules:
+
+<CodeGroup>
+
+```ini mypy.ini
+[mypy]
+enable_error_code = truthy-bool, ignore-without-code
+
+[mypy-tests.*]
+disable_error_code = no-untyped-def, no-untyped-call
+
+[mypy-legacy.*]
+disable_error_code = arg-type, return-value
+```
+
+```toml pyproject.toml
+[tool.mypy]
+enable_error_code = ["truthy-bool", "ignore-without-code"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = ["no-untyped-def", "no-untyped-call"]
+
+[[tool.mypy.overrides]]
+module = "legacy.*"
+disable_error_code = ["arg-type", "return-value"]
+```
+
+</CodeGroup>
+
+### Per-file configuration
+
+Use inline comments at the top of a file:
+
+```python
+# mypy: enable-error-code="truthy-bool, ignore-without-code"
+# mypy: disable-error-code="misc"
+
+def validate(items: list[str]) -> bool:
+    if items:  # Warning: list is always truthy
+        return True
+    return False
+```
+
+## Common error codes
+
+Here are the most frequently used error codes from Mypy's source:
+
+### Type errors
+
+<ParamField path="attr-defined" type="error code">
+  Check that attribute exists.
+  
+  ```python
+  name = "hello"
+  name.append("world")  # error: "str" has no attribute "append"  [attr-defined]
+  ```
+</ParamField>
+
+<ParamField path="name-defined" type="error code">
+  Check that name is defined.
+  
+  ```python
+  print(undefined_var)  # error: Name "undefined_var" is not defined  [name-defined]
+  ```
+</ParamField>
+
+<ParamField path="call-arg" type="error code">
+  Check number, names, and kinds of arguments in calls.
+  
+  ```python
+  def greet(name: str) -> None:
+      print(f"Hello, {name}")
+  
+  greet()  # error: Missing positional argument "name" in call  [call-arg]
+  ```
+</ParamField>
+
+<ParamField path="arg-type" type="error code">
+  Check argument types in calls.
+  
+  ```python
+  def process(x: int) -> None:
+      pass
+  
+  process("hello")  # error: Argument 1 has incompatible type "str"; expected "int"  [arg-type]
+  ```
+</ParamField>
+
+<ParamField path="return-value" type="error code">
+  Check that return value is compatible with signature.
+  
+  ```python
+  def get_number() -> int:
+      return "not a number"  # error: Incompatible return value type  [return-value]
+  ```
+</ParamField>
+
+<ParamField path="assignment" type="error code">
+  Check that assigned value is compatible with target.
+  
+  ```python
+  x: int = "string"  # error: Incompatible types in assignment  [assignment]
+  ```
+</ParamField>
+
+<ParamField path="index" type="error code">
+  Check indexing operations.
+  
+  ```python
+  data: dict[str, int] = {"a": 1}
+  value = data[0]  # error: Invalid index type "int" for "dict[str, int]"  [index]
+  ```
+</ParamField>
+
+<ParamField path="operator" type="error code">
+  Check that operator is valid for operands.
+  
+  ```python
+  result = "hello" + 123  # error: Unsupported operand types  [operator]
+  ```
+</ParamField>
+
+### Import errors
+
+<ParamField path="import" type="error code">
+  Require that imported module can be found or has stubs.
+  
+  ```python
+  import nonexistent_module  # error: Cannot find implementation or library stub  [import]
+  ```
+</ParamField>
+
+<ParamField path="import-not-found" type="error code">
+  Require that imported module can be found. (Subcode of `import`)
+  
+  ```python
+  import missing_package  # error: Cannot find implementation  [import-not-found]
+  ```
+</ParamField>
+
+<ParamField path="import-untyped" type="error code">
+  Require that imported module has stubs. (Subcode of `import`)
+  
+  ```python
+  import untyped_library  # error: Library stubs not installed  [import-untyped]
+  ```
+</ParamField>
+
+### Definition errors
+
+<ParamField path="no-untyped-def" type="error code" default="Disabled">
+  Check that every function has type annotations.
+  
+  ```python
+  def calculate(x, y):  # error: Function is missing a type annotation  [no-untyped-def]
+      return x + y
+  ```
+  
+  Enable with: `--disallow-untyped-defs` or `--enable-error-code no-untyped-def`
+</ParamField>
+
+<ParamField path="no-untyped-call" type="error code" default="Disabled">
+  Disallow calling untyped functions from typed functions.
+  
+  ```python
+  def untyped(x, y):
+      return x + y
+  
+  def typed(a: int, b: int) -> int:
+      return untyped(a, b)  # error: Call to untyped function  [no-untyped-call]
+  ```
+  
+  Enable with: `--disallow-untyped-calls` or `--enable-error-code no-untyped-call`
+</ParamField>
+
+<ParamField path="var-annotated" type="error code">
+  Require variable annotation if type can't be inferred.
+  
+  ```python
+  items = []  # error: Need type annotation for "items"  [var-annotated]
+  ```
+</ParamField>
+
+### Optional error codes
+
+These error codes are disabled by default and must be explicitly enabled:
+
+<ParamField path="redundant-cast" type="error code" default="Disabled">
+  Check that cast changes type of expression.
+  
+  ```python
+  from typing import cast
+  
+  x: int = 5
+  y = cast(int, x)  # error: Redundant cast  [redundant-cast]
+  ```
+  
+  Enable with: `--warn-redundant-casts` or `--enable-error-code redundant-cast`
+</ParamField>
+
+<ParamField path="comparison-overlap" type="error code" default="Enabled">
+  Check that types in comparisons overlap.
+  
+  ```python
+  x: int = 5
+  if x == "hello":  # error: Non-overlapping equality check  [comparison-overlap]
+      pass
+  ```
+</ParamField>
+
+<ParamField path="unreachable" type="error code" default="Disabled">
+  Warn about unreachable statements or expressions.
+  
+  ```python
+  def example(x: int) -> str:
+      if isinstance(x, str):  # Always false
+          return x  # error: Statement is unreachable  [unreachable]
+      return str(x)
+  ```
+  
+  Enable with: `--warn-unreachable` or `--enable-error-code unreachable`
+</ParamField>
+
+<ParamField path="truthy-bool" type="error code" default="Disabled">
+  Warn about expressions always true in boolean contexts.
+  
+  ```python
+  items: list[str] = ["a", "b"]
+  if items:  # error: List is always truthy  [truthy-bool]
+      pass
+  ```
+  
+  Enable with: `--enable-error-code truthy-bool`
+</ParamField>
+
+<ParamField path="unused-ignore" type="error code" default="Disabled">
+  Ensure that all `# type: ignore` comments are necessary.
+  
+  ```python
+  x: int = 5  # type: ignore  # error: Unused "type: ignore" comment  [unused-ignore]
+  ```
+  
+  Enable with: `--warn-unused-ignores` or `--enable-error-code unused-ignore`
+</ParamField>
+
+<ParamField path="ignore-without-code" type="error code" default="Disabled">
+  Warn about `# type: ignore` comments without error codes.
+  
+  ```python
+  x = unknown_function()  # type: ignore  # error: "type: ignore" without code  [ignore-without-code]
+  ```
+  
+  Enable with: `--enable-error-code ignore-without-code`
+</ParamField>
+
+<ParamField path="unused-awaitable" type="error code" default="Disabled">
+  Ensure that all awaitable values are used.
+  
+  ```python
+  async def get_data() -> str:
+      return "data"
+  
+  async def process() -> None:
+      get_data()  # error: Unused awaitable  [unused-awaitable]
+  ```
+  
+  Enable with: `--enable-error-code unused-awaitable`
+</ParamField>
+
+<ParamField path="possibly-undefined" type="error code" default="Disabled">
+  Warn about variables defined only in some execution paths.
+  
+  ```python
+  def example(flag: bool) -> None:
+      if flag:
+          x = 10
+      print(x)  # error: Name "x" may be undefined  [possibly-undefined]
+  ```
+  
+  Enable with: `--enable-error-code possibly-undefined`
+</ParamField>
+
+<ParamField path="explicit-override" type="error code" default="Disabled">
+  Require `@override` decorator for overridden methods.
+  
+  ```python
+  from typing import override
+  
+  class Base:
+      def method(self) -> None: pass
+  
+  class Derived(Base):
+      def method(self) -> None:  # error: Missing @override  [explicit-override]
+          pass
+  ```
+  
+  Enable with: `--enable-error-code explicit-override`
+</ParamField>
+
+## Error code subcodes
+
+Some error codes are subcodes of broader codes. When you ignore a parent code, subcodes are also ignored:
+
+<Accordion title="import subcodes">
+  - `import-not-found`: Module implementation not found
+  - `import-untyped`: Module stubs not found
+  
+  ```python
+  # These both work:
+  import pkg  # type: ignore[import]
+  import pkg  # type: ignore[import-not-found]
+  ```
+</Accordion>
+
+<Accordion title="assignment subcodes">
+  - `method-assign`: Assignment target is a method
+  
+  ```python
+  class MyClass:
+      def method(self) -> None: pass
+  
+  obj = MyClass()
+  obj.method = lambda: None  # type: ignore[assignment]
+  # or: # type: ignore[method-assign]
+  ```
+</Accordion>
+
+<Accordion title="typeddict-item subcodes">
+  - `typeddict-unknown-key`: Unknown key in TypedDict
+  
+  ```python
+  from typing import TypedDict
+  
+  class Person(TypedDict):
+      name: str
+  
+  p: Person = {"name": "Alice", "age": 30}  # type: ignore[typeddict-item]
+  # or: # type: ignore[typeddict-unknown-key]
+  ```
+</Accordion>
+
+## Configuration hierarchy
+
+Error code configuration follows this precedence:
+
+1. **Inline file configuration** (`# mypy: enable-error-code=...`) - Highest
+2. **Per-module config sections** - Adjusts global settings
+3. **Global configuration** (command-line or config file) - Lowest
+
+<CodeGroup>
+
+```ini mypy.ini
+[mypy]
+enable_error_code = truthy-bool, unused-awaitable
+
+[mypy-tests.*]
+disable_error_code = unused-awaitable
+```
+
+```python test_example.py
+# mypy: enable-error-code="redundant-expr"
+# This file has: truthy-bool, redundant-expr
+# But NOT: unused-awaitable (disabled for tests.*)
+```
+
+</CodeGroup>
+
+## Best practices
+
+<Accordion title="Always specify error codes in type ignores">
+  ```python
+  # Good
+  import legacy  # type: ignore[import-not-found]
+  
+  # Bad - suppresses ALL errors
+  import legacy  # type: ignore
+  ```
+</Accordion>
+
+<Accordion title="Enable strict codes incrementally">
+  Start with high-value codes and expand coverage:
+  
+  ```ini
+  [mypy]
+  # Phase 1: Basic strictness
+  enable_error_code = redundant-cast, unused-ignore
+  
+  # Phase 2: More advanced
+  # enable_error_code = truthy-bool, ignore-without-code
+  
+  # Phase 3: Comprehensive
+  # enable_error_code = unused-awaitable, possibly-undefined
+  ```
+</Accordion>
+
+<Accordion title="Use per-module configs for legacy code">
+  ```ini
+  [mypy]
+  enable_error_code = truthy-bool, ignore-without-code
+  
+  [mypy-legacy.*]
+  disable_error_code = no-untyped-def, arg-type
+  
+  [mypy-tests.*]
+  disable_error_code = no-untyped-def
+  ```
+</Accordion>
+
+<Accordion title="Document why codes are disabled">
+  ```python
+  # mypy: disable-error-code="misc"
+  # Reason: Generated file with complex type patterns
+  # TODO: Remove once generator supports proper type hints
+  ```
+</Accordion>
+
+## Requiring error codes
+
+Enable `ignore-without-code` to require error codes in all `# type: ignore` comments:
+
+```bash
+mypy --enable-error-code ignore-without-code src/
+```
+
+This helps maintain code quality by forcing developers to be explicit about which errors they're ignoring:
+
+```python
+# This will error:
+from legacy import foo  # type: ignore  # error: "type: ignore" missing code  [ignore-without-code]
+
+# This is OK:
+from legacy import foo  # type: ignore[import-not-found]
+```
+
+<Tip>
+Combine with `--warn-unused-ignores` to ensure all type ignores are necessary and properly scoped.
+</Tip>

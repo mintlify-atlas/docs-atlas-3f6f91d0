@@ -1,0 +1,332 @@
+---
+title: Using mypy with an existing codebase
+description: Strategies for adopting mypy in large, existing Python codebases
+---
+
+This guide explains how to get started using mypy with an existing, significant codebase that has little or no type annotations.
+
+## Start small
+
+If your codebase is large, pick a subset (5,000 to 50,000 lines) and get mypy to run successfully only on this subset first, **before adding annotations**.
+
+<Steps>
+  <Step title="Choose a subset">
+    Select a manageable portion of your codebase to start with. This should be doable in a day or two.
+  </Step>
+
+  <Step title="Get mypy passing">
+    Fix mypy errors by:
+    - Inserting annotations requested by mypy
+    - Adding `# type: ignore` comments to silence errors you don't want to fix now
+  </Step>
+
+  <Step title="Expand gradually">
+    Once you have mypy passing on a subset, gradually expand to more code.
+  </Step>
+</Steps>
+
+<Tip>
+  The sooner you get some form of mypy passing on your codebase, the sooner you benefit from type checking.
+</Tip>
+
+## Run mypy consistently
+
+Make sure all developers run mypy the same way:
+
+### Configuration file
+
+Check a mypy configuration file into your codebase:
+
+```ini
+# mypy.ini
+[mypy]
+python_version = 3.10
+warn_return_any = True
+warn_unused_configs = True
+
+[mypy-tests.*]
+disallow_untyped_defs = False
+```
+
+### Standardized invocation
+
+Create a script or add to existing tools:
+
+<CodeGroup>
+```bash Script
+#!/bin/bash
+# scripts/run_mypy.sh
+python3 -m mypy my_project
+```
+
+```toml tox
+# tox.ini
+[testenv:mypy]
+deps = mypy==1.8
+commands = mypy my_project
+```
+
+```makefile Makefile
+# Makefile
+.PHONY: mypy
+mypy:
+	python3 -m mypy my_project
+```
+</CodeGroup>
+
+### Pin mypy version
+
+Ensure everyone runs the same mypy version:
+
+```txt
+# requirements-dev.txt
+mypy==1.8.0
+types-requests==2.31.0
+```
+
+<Warning>
+  Different mypy versions may report different errors. Pin the version to prevent surprises.
+</Warning>
+
+## Continuous Integration
+
+Add mypy to your CI pipeline as soon as possible:
+
+```yaml
+# .github/workflows/type-check.yml
+name: Type checking
+on: [push, pull_request]
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python3 -m pip install mypy==1.8
+          python3 -m pip install -r requirements.txt
+      - name: Run mypy
+        run: mypy my_project
+```
+
+This prevents new type errors from being introduced.
+
+## Ignoring errors from certain modules
+
+By default, mypy follows all imports and checks everything. This can result in many errors you don't want to deal with yet.
+
+### Ignore specific modules
+
+Use the `ignore_errors` option:
+
+```ini
+[mypy-package_to_fix_later.*]
+ignore_errors = True
+```
+
+### Invert the pattern
+
+For very large codebases, you can ignore everything by default:
+
+```ini
+[mypy]
+ignore_errors = True
+
+[mypy-package.module_a]
+ignore_errors = False
+
+[mypy-package.module_b]
+ignore_errors = False
+```
+
+### Per-module configuration
+
+Many options can be configured per-module:
+
+```ini
+[mypy-tests.*]
+disallow_untyped_defs = False
+
+[mypy-legacy.*]
+check_untyped_defs = False
+ignore_errors = True
+
+[mypy-newcode.*]
+strict = True
+```
+
+## Fixing import errors
+
+A common error when starting with mypy:
+
+```
+core/config.py:7: error: Cannot find implementation or library stub for module named 'frobnicate'
+core/model.py:9: error: Cannot find implementation or library stub for module named 'acme'
+```
+
+### Solutions
+
+<Accordion title="Install stub packages">
+  Many popular packages have stub packages:
+
+  ```bash
+  pip install types-requests types-redis types-PyYAML
+  ```
+
+  Search for stubs:
+  ```bash
+  mypy --install-types
+  ```
+</Accordion>
+
+<Accordion title="Ignore missing imports">
+  For packages without stubs:
+
+  ```ini
+  [mypy-frobnicate.*]
+  ignore_missing_imports = True
+  ```
+</Accordion>
+
+<Accordion title="Create your own stubs">
+  Create a `.pyi` file for the module:
+
+  ```python
+  # stubs/frobnicate.pyi
+  def process(data: str) -> dict: ...
+  ```
+
+  Then set `MYPYPATH`:
+  ```bash
+  export MYPYPATH=./stubs
+  ```
+</Accordion>
+
+## Incremental adoption strategies
+
+### Strategy 1: Bottom-up
+
+Start with modules that have few dependencies:
+
+<Steps>
+  <Step title="Find leaf modules">
+    Identify modules with minimal imports
+  </Step>
+
+  <Step title="Add type hints">
+    Fully annotate these modules
+  </Step>
+
+  <Step title="Move upward">
+    Gradually work toward modules that depend on the annotated ones
+  </Step>
+</Steps>
+
+### Strategy 2: Top-down
+
+Start with high-level modules:
+
+<Steps>
+  <Step title="Choose entry points">
+    Pick main modules or public APIs
+  </Step>
+
+  <Step title="Add basic annotations">
+    Add type hints to function signatures
+  </Step>
+
+  <Step title="Ignore dependencies">
+    Use `ignore_missing_imports` for unannotated dependencies initially
+  </Step>
+</Steps>
+
+### Strategy 3: Feature-based
+
+Annotate by feature or component:
+
+- New features: Require full type hints
+- Bug fixes: Add type hints to modified code
+- Refactoring: Use as opportunity to add types
+
+## Dealing with type errors
+
+### Quick fixes
+
+<Tabs>
+  <Tab title="Type: ignore">
+    Suppress individual errors:
+
+    ```python
+    result = legacy_function()  # type: ignore[no-untyped-call]
+    ```
+  </Tab>
+
+  <Tab title="Any type">
+    Use `Any` for complex cases:
+
+    ```python
+    from typing import Any
+
+    def process(data: Any) -> dict:
+        # Will refine later
+        return transform(data)
+    ```
+  </Tab>
+
+  <Tab title="Cast">
+    Use `cast` when you know better than mypy:
+
+    ```python
+    from typing import cast
+
+    value = cast(str, get_value())
+    ```
+  </Tab>
+</Tabs>
+
+### Long-term fixes
+
+1. Add proper type annotations
+2. Refactor code to be more type-friendly
+3. Use protocols for duck-typed code
+4. Create stub files for third-party libraries
+
+## Measuring progress
+
+Track your progress over time:
+
+```bash
+# Count type: ignore comments
+grep -r "type: ignore" . | wc -l
+
+# Use mypy's stats
+mypy --txt-report report my_project
+```
+
+## Tips for success
+
+<CardGroup cols={2}>
+  <Card title="Be patient" icon="hourglass">
+    Adopting mypy in a large codebase takes time. Celebrate incremental progress.
+  </Card>
+
+  <Card title="Educate the team" icon="chalkboard-user">
+    Make sure everyone understands the benefits and how to write typed code.
+  </Card>
+
+  <Card title="Set policies" icon="book-bookmark">
+    Decide on rules: e.g., "all new code must have type hints"
+  </Card>
+
+  <Card title="Review together" icon="users">
+    Use code review to improve type annotations and share knowledge.
+  </Card>
+</CardGroup>
+
+<Note>
+  The goal isn't 100% coverage immediately. Even partial type checking provides significant value.
+</Note>

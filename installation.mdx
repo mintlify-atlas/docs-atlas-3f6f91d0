@@ -1,0 +1,287 @@
+---
+title: Installation
+description: Install mypy and get started with static type checking for Python
+---
+
+# Installation
+
+Mypy requires Python 3.10 or later to run. You can install it using pip, install from source, or use alternative installation methods.
+
+## Requirements
+
+<Info>
+Mypy requires **Python 3.10 or later** to run. The type checker itself needs this version, but you can configure mypy to check code targeting older Python versions.
+</Info>
+
+## Installing with pip
+
+The easiest way to install mypy is using pip:
+
+```bash
+python3 -m pip install -U mypy
+```
+
+This installs the latest stable version of mypy from PyPI.
+
+<Steps>
+  <Step title="Verify your Python version">
+    Make sure you have Python 3.10 or later installed:
+    
+    ```bash
+    python3 --version
+    ```
+    
+    You should see output like `Python 3.10.0` or higher.
+  </Step>
+  
+  <Step title="Install mypy">
+    Install mypy using pip:
+    
+    ```bash
+    python3 -m pip install -U mypy
+    ```
+    
+    The `-U` flag ensures you get the latest version.
+  </Step>
+  
+  <Step title="Verify installation">
+    Check that mypy is installed correctly:
+    
+    ```bash
+    mypy --version
+    ```
+    
+    You should see output like `mypy 1.x.x (compiled: yes)`.
+  </Step>
+</Steps>
+
+## Installing from source
+
+If you want to run the latest development version, install directly from the GitHub repository:
+
+```bash
+python3 -m pip install -U git+https://github.com/python/mypy.git
+```
+
+<Warning>
+The development version may contain bugs or incomplete features. Use the stable release for production work.
+</Warning>
+
+## Installing without compilation
+
+By default, mypy is installed as a compiled package using [mypyc](https://github.com/mypyc/mypyc), which makes it approximately 4x faster. If you need an interpreted version instead:
+
+```bash
+python3 -m pip install --no-binary mypy -U mypy
+```
+
+<Note>
+The compiled version is recommended for most users. Only use the interpreted version if you're debugging mypy itself or have specific compatibility requirements.
+</Note>
+
+## Optional dependencies
+
+Mypy supports several optional features that require additional packages:
+
+<CodeGroup>
+
+```bash Daemon mode
+python3 -m pip install mypy[dmypy]
+```
+
+```bash HTML/XML reports
+python3 -m pip install mypy[reports]
+```
+
+```bash Faster cache
+python3 -m pip install mypy[faster-cache]
+```
+
+```bash All extras
+python3 -m pip install mypy[dmypy,reports,faster-cache]
+```
+
+</CodeGroup>
+
+### Optional dependencies explained
+
+- **dmypy** - Installs `psutil` for daemon mode, which provides much faster incremental updates
+- **reports** - Installs `lxml` for generating HTML and XML coverage reports
+- **faster-cache** - Installs `orjson` for faster cache serialization
+- **install-types** - Installs `pip` for the `--install-types` feature (usually already available)
+
+## IDE integrations
+
+Mypy can be integrated into popular editors and IDEs:
+
+<CardGroup cols={2}>
+  <Card title="VS Code" icon="microsoft">
+    VS Code provides [basic integration](https://code.visualstudio.com/docs/python/linting#_mypy) with mypy out of the box.
+  </Card>
+  
+  <Card title="PyCharm" icon="p">
+    Install the [mypy plugin](https://github.com/dropbox/mypy-PyCharm-plugin) for PyCharm.
+  </Card>
+  
+  <Card title="Vim" icon="vim">
+    Use [Syntastic](https://github.com/vim-syntastic/syntastic) or [ALE](https://github.com/dense-analysis/ale) for Vim integration.
+  </Card>
+  
+  <Card title="Emacs" icon="e">
+    Use [Flycheck](https://github.com/flycheck/) for Emacs integration.
+  </Card>
+</CardGroup>
+
+### VS Code setup
+
+For VS Code, mypy support is built in:
+
+<Steps>
+  <Step title="Install the Python extension">
+    Install the official Python extension from Microsoft.
+  </Step>
+  
+  <Step title="Enable mypy">
+    Add to your `.vscode/settings.json`:
+    
+    ```json
+    {
+      "python.linting.mypyEnabled": true,
+      "python.linting.enabled": true
+    }
+    ```
+  </Step>
+</Steps>
+
+### Vim setup
+
+<Tabs>
+  <Tab title="Using Syntastic">
+    Add to your `~/.vimrc`:
+    
+    ```vim
+    let g:syntastic_python_checkers=['mypy']
+    ```
+  </Tab>
+  
+  <Tab title="Using ALE">
+    ALE enables mypy by default when it's installed. To explicitly enable it:
+    
+    ```vim
+    " In ~/vim/ftplugin/python.vim
+    let b:ale_linters = ['mypy']
+    ```
+  </Tab>
+</Tabs>
+
+### Pre-commit hook
+
+Integrate mypy with pre-commit to check code before commits:
+
+```yaml .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+```
+
+<Warning>
+By default, this limits mypy's ability to analyze third-party dependencies. See the [pre-commit mirrors-mypy](https://github.com/pre-commit/mirrors-mypy) documentation for workarounds.
+</Warning>
+
+## Verifying installation
+
+Once installed, verify mypy works correctly:
+
+<Steps>
+  <Step title="Check version">
+    ```bash
+    mypy --version
+    ```
+    
+    Expected output:
+    ```
+    mypy 1.8.0 (compiled: yes)
+    ```
+  </Step>
+  
+  <Step title="Create a test file">
+    Create a file called `test.py`:
+    
+    ```python test.py
+    def greeting(name: str) -> str:
+        return "Hello " + name
+    
+    greeting(123)  # This should produce an error
+    ```
+  </Step>
+  
+  <Step title="Run mypy">
+    ```bash
+    mypy test.py
+    ```
+    
+    Expected output:
+    ```
+    test.py:4: error: Argument 1 to "greeting" has incompatible type "int"; expected "str"  [arg-type]
+    Found 1 error in 1 file (checked 1 source file)
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+If you see the error message above, congratulations! Mypy is working correctly.
+</Tip>
+
+## Troubleshooting
+
+### Command not found
+
+If you get `mypy: command not found`, the installation directory may not be in your PATH:
+
+```bash
+# Try using the module form instead
+python3 -m mypy test.py
+
+# Or add pip's bin directory to your PATH
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### Python version mismatch
+
+If you see errors about Python version requirements:
+
+<CodeGroup>
+
+```bash Check Python version
+python3 --version
+```
+
+```bash Upgrade Python
+# On Ubuntu/Debian
+sudo apt update
+sudo apt install python3.10
+
+# On macOS with Homebrew
+brew install python@3.10
+```
+
+</CodeGroup>
+
+### Import errors
+
+If you see import errors when running mypy, ensure the packages are installed in the same environment:
+
+```bash
+# Check which Python mypy is using
+which mypy
+python3 -c "import sys; print(sys.executable)"
+
+# If they differ, reinstall mypy in the correct environment
+python3 -m pip install --force-reinstall mypy
+```
+
+## Next steps
+
+Now that mypy is installed, you're ready to start type checking! Head over to the [quickstart guide](/quickstart) to learn how to use mypy on your code.

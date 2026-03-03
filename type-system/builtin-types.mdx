@@ -1,0 +1,168 @@
+---
+title: Built-in types
+description: Learn about commonly used built-in types in Mypy.
+---
+
+## Simple types
+
+Here are examples of common built-in types:
+
+| Type | Description |
+|------|-------------|
+| `int` | Integer |
+| `float` | Floating point number |
+| `bool` | Boolean value (subclass of `int`) |
+| `str` | Text, sequence of unicode codepoints |
+| `bytes` | 8-bit string, sequence of byte values |
+| `object` | An arbitrary object (`object` is the common base class) |
+
+All built-in classes can be used as types:
+
+```python
+def process_number(x: int) -> float:
+    return float(x) * 1.5
+
+def greet(name: str) -> None:
+    print(f"Hello, {name}")
+```
+
+## The Any type
+
+If you can't find a good type for some value, you can use `Any`:
+
+```python
+from typing import Any
+
+def process_data(data: Any) -> None:
+    # Can perform any operation on data
+    print(data.anything())  # No type checking
+```
+
+<Warning>
+The type `Any` is dynamically typed. Mypy doesn't know anything about the possible runtime types of such values. Use it as an "escape hatch" only when necessary.
+</Warning>
+
+See the [dynamic typing](/type-system/kinds-of-types#the-any-type) section for more details.
+
+## Generic types
+
+In Python 3.9 and later, built-in collection type objects support indexing:
+
+<Tabs>
+  <Tab title="Python 3.9+">
+    ```python
+    # Built-in generic types
+    items: list[str]              # List of str objects
+    coordinates: tuple[int, int]  # Tuple of two int objects
+    data: dict[str, int]          # Dictionary from str keys to int values
+    
+    # Variable length
+    values: tuple[int, ...]       # Tuple of arbitrary number of ints
+    ```
+  </Tab>
+  
+  <Tab title="Python 3.8 and earlier">
+    ```python
+    from typing import List, Tuple, Dict
+    
+    # Legacy generic types from typing module
+    items: List[str]              # List of str objects
+    coordinates: Tuple[int, int]  # Tuple of two int objects
+    data: Dict[str, int]          # Dictionary from str keys to int values
+    
+    # Variable length
+    values: Tuple[int, ...]       # Tuple of arbitrary number of ints
+    ```
+  </Tab>
+</Tabs>
+
+## Common generic types
+
+| Type | Description |
+|------|-------------|
+| `list[str]` | List of `str` objects |
+| `tuple[int, int]` | Tuple of two `int` objects |
+| `tuple[int, ...]` | Tuple of an arbitrary number of `int` objects |
+| `dict[str, int]` | Dictionary from `str` keys to `int` values |
+| `set[int]` | Set of `int` objects |
+
+## Protocol types
+
+`Iterable`, `Sequence`, and `Mapping` are generic types that correspond to Python protocols:
+
+```python
+from collections.abc import Iterable, Sequence, Mapping
+
+def process_items(items: Iterable[int]) -> None:
+    for item in items:
+        print(item)
+
+# Works with different types
+process_items([1, 2, 3])        # list
+process_items((1, 2, 3))        # tuple
+process_items({1, 2, 3})        # set
+```
+
+<Info>
+A `str` object or a `list[str]` object is valid when `Iterable[str]` or `Sequence[str]` is expected.
+</Info>
+
+## Type objects
+
+You can use `type[C]` to refer to the type object of a class:
+
+```python
+class User:
+    pass
+
+def create_instance(cls: type[User]) -> User:
+    return cls()
+
+user = create_instance(User)  # OK
+```
+
+See [The type of class objects](/type-system/kinds-of-types#the-type-of-class-objects) for more details.
+
+## Common examples
+
+<CodeGroup>
+```python Lists and dictionaries
+from typing import List, Dict
+
+# Lists
+names: list[str] = ["Alice", "Bob"]
+numbers: list[int] = [1, 2, 3]
+mixed: list[int | str] = [1, "two", 3]
+
+# Dictionaries
+scores: dict[str, int] = {"Alice": 95, "Bob": 87}
+config: dict[str, str | int] = {"host": "localhost", "port": 8080}
+```
+
+```python Tuples
+# Fixed length tuples
+point: tuple[int, int] = (10, 20)
+person: tuple[str, int, bool] = ("Alice", 30, True)
+
+# Variable length tuples
+numbers: tuple[int, ...] = (1, 2, 3, 4, 5)
+```
+
+```python Sets
+# Sets
+unique_ids: set[int] = {1, 2, 3}
+tags: set[str] = {"python", "typing", "mypy"}
+```
+</CodeGroup>
+
+## Compatibility note
+
+<Note>
+In Python 3.9 and later, you can use built-in collection types directly with type parameters (e.g., `list[int]`). For Python 3.8 and earlier, import from the `typing` module instead:
+
+```python
+from typing import List, Dict, Tuple, Set
+
+items: List[int] = [1, 2, 3]
+```
+</Note>

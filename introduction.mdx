@@ -1,0 +1,155 @@
+---
+title: Introduction
+description: Static type checker for Python - catch bugs before runtime
+---
+
+# Mypy: static typing for Python
+
+Mypy is a static type checker for Python that helps you find bugs before you even run your code. Add type hints to your Python programs, and mypy will warn you when you use those types incorrectly.
+
+<Info>
+Python is a dynamic language, so you'll usually only see errors when you run your code. Mypy is a **static** checker, so it finds bugs without running them.
+</Info>
+
+Here's a simple example of mypy catching a bug:
+
+```python
+number = input("What is your favourite number?")
+print("It is", number + 1)  # error: Unsupported operand types for + ("str" and "int")
+```
+
+Mypy spotted that `input()` returns a string, not a number, so adding 1 to it will fail at runtime.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Gradual typing" icon="timeline">
+    Add type hints incrementally to your codebase. Mix typed and untyped code freely.
+  </Card>
+  
+  <Card title="Powerful type system" icon="wand-magic-sparkles">
+    Support for generics, callable types, tuple types, union types, structural subtyping, and more.
+  </Card>
+  
+  <Card title="Non-invasive" icon="ghost">
+    Type hints are like comments - your code runs the same with or without them.
+  </Card>
+  
+  <Card title="Fast incremental checking" icon="bolt">
+    Daemon mode provides sub-second incremental type checking for large codebases.
+  </Card>
+</CardGroup>
+
+## How it works
+
+Type hints don't interfere with how your program runs. Think of them as enhanced comments:
+
+<CodeGroup>
+
+```python Without type hints
+def greeting(name):
+    return 'Hello ' + name
+
+greeting(123)  # This will crash at runtime, but mypy won't catch it
+```
+
+```python With type hints
+def greeting(name: str) -> str:
+    return 'Hello ' + name
+
+greeting(123)  # error: Argument 1 has incompatible type "int"; expected "str"
+```
+
+</CodeGroup>
+
+<Note>
+You can always use the Python interpreter to run your code, even if mypy reports errors. Type checking is completely optional.
+</Note>
+
+## Gradual typing
+
+Mypy is designed with gradual typing in mind. You can:
+
+- Add type hints to your codebase slowly, file by file or function by function
+- Always fall back to dynamic typing when static typing isn't convenient
+- Mix typed and untyped code in the same project
+
+This makes it easy to adopt mypy incrementally, whether you're:
+
+- Migrating an existing Python codebase to use static types
+- Prototyping new features dynamically, then adding types later
+- Working with third-party libraries that don't have type hints
+
+## Type system features
+
+Mypy has a powerful and easy-to-use type system that supports:
+
+<CardGroup cols={2}>
+  <Card title="Type inference" icon="brain">
+    Automatically deduce types from context without requiring annotations everywhere.
+  </Card>
+  
+  <Card title="Generics" icon="boxes-stacked">
+    Create reusable code that works with multiple types, like `list[int]` or `dict[str, float]`.
+  </Card>
+  
+  <Card title="Callable types" icon="function">
+    Express function signatures as types, enabling higher-order functions.
+  </Card>
+  
+  <Card title="Union types" icon="code-merge">
+    Allow values to be one of several types using `int | str` syntax.
+  </Card>
+  
+  <Card title="Tuple types" icon="list">
+    Fixed-size tuples with per-element types like `tuple[int, str, float]`.
+  </Card>
+  
+  <Card title="Structural subtyping" icon="sitemap">
+    Types are compatible based on their structure (protocols), not just inheritance.
+  </Card>
+</CardGroup>
+
+## Why use mypy?
+
+Using mypy makes your programs:
+
+- **Easier to understand** - Type hints serve as machine-checked documentation
+- **Easier to debug** - Catch type errors before runtime, not during production
+- **Easier to maintain** - Refactor with confidence, knowing the type checker has your back
+
+<Tip>
+With the `--strict` flag, you can achieve near-zero runtime type errors. You'll basically never get a type-related error at runtime without a corresponding mypy error.
+</Tip>
+
+## Getting started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install mypy using pip and verify your setup.
+  </Card>
+  
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Type-check your first Python program in minutes.
+  </Card>
+  
+  <Card title="Cheat sheet" icon="sheet-plastic" href="/cheat-sheet">
+    Quick reference for common type hints and patterns.
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Configure mypy for your project's needs.
+  </Card>
+</CardGroup>
+
+## Compiled with mypyc
+
+<Info>
+Mypy is compiled using [mypyc](https://github.com/mypyc/mypyc), making it approximately **4x faster** than interpreted Python. Mypyc uses Python type hints to compile Python modules to faster C extensions.
+</Info>
+
+This means mypy can type-check large codebases quickly, often in under a second with incremental mode.
+
+## Next steps
+
+Ready to start using mypy? Check out the [installation guide](/installation) or jump straight to the [quickstart](/quickstart).

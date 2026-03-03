@@ -1,0 +1,459 @@
+---
+title: Stub files
+description: Creating and using stub files for type checking Python code
+---
+
+A **stub file** is a file containing a skeleton of the public interface of a Python module, including classes, variables, functions, and most importantly, their types.
+
+## What are stubs?
+
+Stub files use the `.pyi` extension and contain type information without implementation:
+
+<CodeGroup>
+```python Implementation (csv_utils.py)
+def read_csv(filename, encoding='utf-8'):
+    """Read a CSV file and return rows."""
+    with open(filename, encoding=encoding) as f:
+        # ... implementation ...
+        return rows
+```
+
+```python Stub (csv_utils.pyi)
+from typing import Sequence
+
+def read_csv(
+    filename: str,
+    encoding: str = ...
+) -> Sequence[dict[str, str]]: ...
+```
+</CodeGroup>
+
+Mypy uses the stub file for type checking, while Python uses the implementation at runtime.
+
+## Why use stubs?
+
+<CardGroup cols={2}>
+  <Card title="Third-party libraries" icon="boxes-stacked">
+    Add types to libraries you don't control
+  </Card>
+
+  <Card title="Legacy code" icon="clock-rotate-left">
+    Add types without modifying source
+  </Card>
+
+  <Card title="C extensions" icon="c">
+    Provide types for C/C++ extension modules
+  </Card>
+
+  <Card title="Performance" icon="gauge-high">
+    Separate type information from runtime code
+  </Card>
+</CardGroup>
+
+## Creating stub files
+
+### Manual creation
+
+<Steps>
+  <Step title="Create .pyi file">
+    Create a stub file with the same name as the module:
+
+    ```bash
+    # For module mymodule.py
+    touch mymodule.pyi
+    ```
+  </Step>
+
+  <Step title="Add type signatures">
+    Write the public interface with types:
+
+    ```python
+    # mymodule.pyi
+    class MyClass:
+        attribute: int
+        def method(self, x: str) -> bool: ...
+
+    def helper(x: int) -> str: ...
+    ```
+  </Step>
+
+  <Step title="Configure MYPYPATH">
+    If stubs are in a separate directory:
+
+    ```bash
+    export MYPYPATH=~/myproject/stubs
+    ```
+  </Step>
+</Steps>
+
+### Using stubgen
+
+Mypy includes `stubgen` to automatically generate stubs:
+
+```bash
+# Generate stub for a module
+stubgen mymodule.py
+
+# Generate stub for a package
+stubgen -p mypackage
+
+# Generate stubs for installed package
+stubgen -p requests
+```
+
+See [stubgen command reference](/commands/stubgen) for details.
+
+## Stub file syntax
+
+Stub files use normal Python syntax with some conventions:
+
+### Variables
+
+```python
+# Variables with annotations don't need values
+default_encoding: str
+MAX_SIZE: int
+
+# Use Literal for constants
+from typing import Literal
+DEBUG: Literal[True]
+```
+
+### Functions
+
+```python
+# Use ellipsis for function bodies
+def greet(name: str) -> None: ...
+
+# Default arguments use ellipsis
+def connect(host: str, port: int = ...) -> Connection: ...
+
+# Overloads
+from typing import overload
+
+@overload
+def process(x: int) -> int: ...
+@overload
+def process(x: str) -> str: ...
+def process(x: int | str) -> int | str: ...
+```
+
+### Classes
+
+```python
+class Connection:
+    host: str
+    port: int
+    
+    def __init__(self, host: str, port: int = ...) -> None: ...
+    def send(self, data: bytes) -> None: ...
+    def close(self) -> None: ...
+```
+
+### Type aliases
+
+```python
+from typing import Union
+
+JSON = Union[dict, list, str, int, float, bool, None]
+
+def parse_json(data: str) -> JSON: ...
+```
+
+## Stub file locations
+
+Mypy searches for stubs in several locations:
+
+### Inline stubs
+
+Place `.pyi` file next to `.py` file:
+
+```
+myproject/
+├── mymodule.py
+└── mymodule.pyi  # Takes precedence
+```
+
+The `.pyi` file takes precedence over `.py` for type checking.
+
+### Stub directory
+
+Use a dedicated stubs directory:
+
+```
+myproject/
+├── src/
+│   └── mypackage/
+│       └── module.py
+└── stubs/
+    └── mypackage/
+        └── module.pyi
+```
+
+Configure MYPYPATH:
+
+```bash
+export MYPYPATH=~/myproject/stubs
+```
+
+### Installed stub packages
+
+Install PEP 561 stub packages:
+
+```bash
+pip install types-requests
+pip install types-redis
+```
+
+Mypy finds these automatically.
+
+<Note>
+  Stub-only packages must be installed - they cannot be used via MYPYPATH.
+</Note>
+
+## PEP 561 stub packages
+
+### Using stub packages
+
+Many popular libraries have stub packages:
+
+```bash
+# Install stubs for requests
+pip install types-requests
+
+# Install stubs for multiple packages
+pip install types-redis types-PyYAML types-toml
+
+# Auto-install missing stubs
+mypy --install-types
+```
+
+### Creating stub packages
+
+To distribute stubs for a library:
+
+<Steps>
+  <Step title="Create package structure">
+    ```
+    mylibrary-stubs/
+    ├── setup.py
+    └── mylibrary-stubs/
+        ├── __init__.pyi
+        └── submodule.pyi
+    ```
+  </Step>
+
+  <Step title="Configure setup.py">
+    ```python
+    from setuptools import setup
+
+    setup(
+        name="mylibrary-stubs",
+        version="1.0.0",
+        packages=["mylibrary-stubs"],
+        package_data={"mylibrary-stubs": ["*.pyi"]},
+    )
+    ```
+  </Step>
+
+  <Step title="Add py.typed marker">
+    ```bash
+    touch mylibrary-stubs/py.typed
+    ```
+  </Step>
+</Steps>
+
+## Typeshed
+
+[Typeshed](https://github.com/python/typeshed) is a repository of stubs for the Python standard library and popular third-party packages.
+
+Mypy includes a copy of typeshed for:
+- Python standard library
+- Common third-party libraries
+
+### Contributing to typeshed
+
+To add stubs for a library:
+
+1. Fork the typeshed repository
+2. Add stubs in `stubs/libraryname/`
+3. Add a `METADATA.toml` file
+4. Submit a pull request
+
+See [typeshed contributing guide](https://github.com/python/typeshed/blob/main/CONTRIBUTING.md).
+
+## Partial stubs
+
+You don't need to stub everything:
+
+```python
+# mymodule.pyi
+
+# Stub only the functions you use
+def important_function(x: int) -> str: ...
+
+# Leave out internal implementation details
+# _internal_helper not included
+```
+
+Mypy will infer types from implementation for unst ubbed members.
+
+## Stub testing with stubtest
+
+Verify stubs match implementation:
+
+```bash
+stubtest mymodule
+```
+
+This catches:
+- Missing functions or classes
+- Incorrect signatures
+- Type mismatches
+
+See [stubtest command reference](/commands/stubtest) for details.
+
+## Common patterns
+
+### Platform-specific code
+
+```python
+import sys
+
+if sys.platform == "win32":
+    def windows_only() -> None: ...
+else:
+    def unix_only() -> None: ...
+```
+
+### Version-specific code
+
+```python
+import sys
+
+if sys.version_info >= (3, 10):
+    def new_function() -> None: ...
+```
+
+### Re-exports
+
+```python
+# Make imported names visible
+from submodule import helper as helper
+from submodule import MyClass as MyClass
+
+# Or use __all__
+__all__ = ["helper", "MyClass"]
+```
+
+### Incomplete information
+
+Use `Any` when you don't know the type:
+
+```python
+from typing import Any
+
+def complex_function(x: Any) -> Any: ...
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Start with stubgen" icon="wand-magic-sparkles">
+    Generate initial stubs automatically, then refine manually
+  </Card>
+
+  <Card title="Use stubtest" icon="flask">
+    Regularly verify stubs match implementation
+  </Card>
+
+  <Card title="Contribute upstream" icon="code-pull-request">
+    Share useful stubs with typeshed or the library maintainers
+  </Card>
+
+  <Card title="Keep stubs simple" icon="minimize">
+    Stubs should contain only type information, no implementation
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Stub not being used
+
+Check stub discovery:
+
+```bash
+mypy --verbose myproject | grep ".pyi"
+```
+
+### Conflicting stubs
+
+If multiple stubs exist, mypy uses this priority:
+
+1. Inline stubs (`.pyi` next to `.py`)
+2. Installed PEP 561 packages
+3. Stubs in MYPYPATH
+4. Typeshed
+
+### Incomplete stubs
+
+Allow partial stubs:
+
+```ini
+# mypy.ini
+[mypy]
+allow_incomplete_stubs = True
+```
+
+<Warning>
+  Don't point MYPYPATH to `site-packages` or the standard library - this will cause errors.
+</Warning>
+
+## Examples
+
+### Stubbing a simple module
+
+<CodeGroup>
+```python Implementation
+# calculator.py
+class Calculator:
+    def __init__(self):
+        self.memory = 0
+    
+    def add(self, x, y):
+        return x + y
+    
+    def store(self, value):
+        self.memory = value
+```
+
+```python Stub
+# calculator.pyi
+class Calculator:
+    memory: int
+    
+    def __init__(self) -> None: ...
+    def add(self, x: int, y: int) -> int: ...
+    def store(self, value: int) -> None: ...
+```
+</CodeGroup>
+
+### Stubbing with overloads
+
+```python
+# formatters.pyi
+from typing import overload
+
+@overload
+def format_value(value: int) -> str: ...
+@overload
+def format_value(value: float, precision: int = ...) -> str: ...
+@overload
+def format_value(value: str) -> str: ...
+
+def format_value(value: int | float | str, precision: int = ...) -> str: ...
+```
+
+<Tip>
+  Use stubs to add types to third-party libraries without waiting for upstream support!
+</Tip>

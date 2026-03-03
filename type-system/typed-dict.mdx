@@ -1,0 +1,303 @@
+---
+title: TypedDict
+description: Learn how to use TypedDict for precise dictionary type annotations.
+---
+
+## What is TypedDict?
+
+Python programs often use dictionaries with string keys to represent objects. `TypedDict` lets you give precise types for dictionaries with a fixed schema:
+
+```python
+from typing import TypedDict
+
+Movie = TypedDict('Movie', {'name': str, 'year': int})
+
+movie: Movie = {'name': 'Blade Runner', 'year': 1982}
+```
+
+<Info>
+The type annotation is important — without it, mypy will infer a regular `dict` type.
+</Info>
+
+## Why use TypedDict?
+
+Regular `dict[K, V]` types require all values to have the same type. TypedDict allows each key to have an independent value type:
+
+<CodeGroup>
+```python With TypedDict
+movie: Movie = {'name': 'Blade Runner', 'year': 1982}
+
+name = movie['name']  # Type is str
+year = movie['year']  # Type is int
+```
+
+```python With regular dict
+movie: dict[str, str | int] = {'name': 'Blade Runner', 'year': 1982}
+
+name = movie['name']  # Type is str | int (not precise!)
+```
+</CodeGroup>
+
+## Type checking with TypedDict
+
+Mypy validates keys and value types:
+
+```python
+movie: Movie = {'name': 'Blade Runner', 'year': 1982}
+
+name = movie['name']  # OK; type is str
+year = movie['year']  # OK; type is int
+
+director = movie['director']  # Error: 'director' is not a valid key
+```
+
+<Warning>
+Mypy only accepts string literals as TypedDict keys. Runtime-computed expressions are rejected.
+</Warning>
+
+## Class-based syntax
+
+An alternative, class-based syntax is available (Python 3.6+):
+
+```python
+from typing import TypedDict
+
+class Movie(TypedDict):
+    name: str
+    year: int
+
+movie: Movie = {'name': 'Blade Runner', 'year': 1982}
+```
+
+<Note>
+The class-based syntax doesn't define a real class. It's just a type definition.
+</Note>
+
+## TypedDict inheritance
+
+The class-based syntax supports inheritance:
+
+```python
+class Movie(TypedDict):
+    name: str
+    year: int
+
+class BookBasedMovie(Movie):
+    based_on: str
+
+# BookBasedMovie has keys: name, year, based_on
+```
+
+## Totality
+
+By default, all keys are required. Use `total=False` to make keys optional:
+
+<Tabs>
+  <Tab title="Required keys (default)">
+    ```python
+    Movie = TypedDict('Movie', {'name': str, 'year': int})
+    
+    toy_story: Movie = {'name': 'Toy Story'}  # Error: 'year' missing
+    ```
+  </Tab>
+  
+  <Tab title="Optional keys">
+    ```python
+    GuiOptions = TypedDict(
+        'GuiOptions',
+        {'language': str, 'color': str},
+        total=False
+    )
+    
+    options: GuiOptions = {}  # OK
+    options['language'] = 'en'  # OK
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+Optional keys are shown with a `?` in error messages: `{'language'?: str, 'color'?: str}`
+</Info>
+
+## Mixing required and optional keys
+
+Use inheritance to mix required and optional keys:
+
+```python
+class MovieBase(TypedDict):
+    name: str
+    year: int
+
+class Movie(MovieBase, total=False):
+    based_on: str
+
+# 'name' and 'year' are required
+# 'based_on' is optional
+```
+
+## Read-only items
+
+Use `ReadOnly` to mark TypedDict items as read-only:
+
+```python
+from typing import TypedDict
+from typing_extensions import ReadOnly
+
+class Movie(TypedDict):
+    name: ReadOnly[str]
+    num_watched: int
+
+m: Movie = {"name": "Jaws", "num_watched": 1}
+m["name"] = "The Godfather"  # Error: "name" is read-only
+m["num_watched"] += 1  # OK
+```
+
+## Supported operations
+
+TypedDict objects support a subset of dictionary operations:
+
+<AccordionGroup>
+  <Accordion title="Mapping operations">
+    - `d[key]` — Get item
+    - `key in d` — Check membership
+    - `len(d)` — Get length
+    - `for key in d` — Iteration
+    - `d.get(key[, default])` — Get with default
+    - `d.keys()`, `d.values()`, `d.items()` — Views
+  </Accordion>
+  
+  <Accordion title="Mutation operations">
+    - `d.copy()` — Shallow copy
+    - `d.setdefault(key, default)` — Set default
+    - `d1.update(d2)` — Update from another dict
+    - `d.pop(key[, default])` — Pop key (partial TypedDicts only)
+    - `del d[key]` — Delete key (partial TypedDicts only)
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+`clear()` and `popitem()` are not supported since they could delete required items.
+</Warning>
+
+## Using as constructor
+
+The TypedDict type object can act as a constructor:
+
+```python
+toy_story = Movie(name='Toy Story', year=1995)
+
+# Equivalent to:
+toy_story = {'name': 'Toy Story', 'year': 1995}
+```
+
+## Structural compatibility
+
+Mypy uses structural compatibility with TypedDicts. A TypedDict with extra items is compatible with a narrower TypedDict:
+
+```python
+class Movie(TypedDict):
+    name: str
+    year: int
+
+class BookBasedMovie(TypedDict):
+    name: str
+    year: int
+    based_on: str
+
+def print_movie(movie: Movie) -> None:
+    print(f"{movie['name']} ({movie['year']})")
+
+book_movie: BookBasedMovie = {
+    'name': 'Dune',
+    'year': 2021,
+    'based_on': 'Dune by Frank Herbert'
+}
+
+print_movie(book_movie)  # OK
+```
+
+## TypedDict and Mapping
+
+Any TypedDict is compatible with `Mapping[str, object]`:
+
+```python
+from collections.abc import Mapping
+
+def print_typed_dict(obj: Mapping[str, object]) -> None:
+    for key, value in obj.items():
+        print(f'{key}: {value}')
+
+print_typed_dict(Movie(name='Toy Story', year=1995))  # OK
+```
+
+<Note>
+A TypedDict object is not a subtype of `dict[str, ...]` since `dict` allows arbitrary keys to be added and removed.
+</Note>
+
+## Unions of TypedDicts
+
+Use the tagged union pattern to distinguish between different TypedDict variants:
+
+```python
+from typing import Literal, TypedDict
+
+class NewJobEvent(TypedDict):
+    tag: Literal["new-job"]
+    job_name: str
+    config_file_path: str
+
+class CancelJobEvent(TypedDict):
+    tag: Literal["cancel-job"]
+    job_id: int
+
+Event = NewJobEvent | CancelJobEvent
+
+def process_event(event: Event) -> None:
+    if event["tag"] == "new-job":
+        print(event["job_name"])
+    else:
+        print(event["job_id"])
+```
+
+<Tip>
+Since TypedDicts are regular dicts at runtime, you cannot use `isinstance()` to distinguish between different variants. Use a discriminator field instead.
+</Tip>
+
+## Inline TypedDict types
+
+Mypy supports experimental inline TypedDict syntax:
+
+```python
+# Enable with: --enable-incomplete-feature=InlineTypedDict
+
+def test_values() -> {"width": int, "description": str}:
+    return {"width": 42, "description": "test"}
+
+class Response(TypedDict):
+    status: int
+    content: {"items": list[{"key": str, "value": str}]}
+```
+
+<Warning>
+This is an experimental feature. Use `--enable-incomplete-feature=InlineTypedDict` to enable it.
+</Warning>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use class-based syntax">
+    The class-based syntax is more readable and supports inheritance.
+  </Accordion>
+  
+  <Accordion title="Annotate variables">
+    Always provide explicit type annotations when creating TypedDict objects to avoid inference issues.
+  </Accordion>
+  
+  <Accordion title="Use tagged unions">
+    For discriminated unions, add a literal-typed tag field to enable type narrowing.
+  </Accordion>
+  
+  <Accordion title="Prefer total=True">
+    Making keys required by default helps catch missing data early.
+  </Accordion>
+</AccordionGroup>

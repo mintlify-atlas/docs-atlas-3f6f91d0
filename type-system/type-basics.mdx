@@ -1,0 +1,153 @@
+---
+title: Type basics
+description: Learn the fundamentals of Mypy's type system and type annotations.
+---
+
+## Overview
+
+Mypy's type system allows you to add type annotations to your Python code to catch errors before runtime. Type annotations specify what types of values variables, function parameters, and return values can have.
+
+## Type inference
+
+For most variables, if you don't explicitly specify a type, mypy will infer the correct type based on what is initially assigned to the variable.
+
+```python
+# Mypy will infer the type of these variables
+i = 1
+reveal_type(i)  # Revealed type is "builtins.int"
+
+l = [1, 2]
+reveal_type(l)  # Revealed type is "builtins.list[builtins.int]"
+```
+
+<Note>
+Mypy will not use type inference in dynamically typed functions (those without a function type annotation) — every local variable type defaults to `Any` in such functions.
+</Note>
+
+## Explicit type annotations
+
+You can override the inferred type of a variable by using a variable type annotation:
+
+```python
+x: int | str = 1
+```
+
+Without the type annotation, the type of `x` would be just `int`. The annotation gives it a more general type `int | str`.
+
+<Tip>
+The type annotation sets the type of the variable, not the type of the expression.
+</Tip>
+
+## Function annotations
+
+<Steps>
+  <Step title="Annotate parameters">
+    Add type annotations to function parameters to specify what types are accepted:
+    
+    ```python
+    def greet(name: str) -> None:
+        print(f"Hello, {name}")
+    ```
+  </Step>
+  
+  <Step title="Annotate return types">
+    Always specify the return type, even for functions that return `None`:
+    
+    ```python
+    def wait(t: float) -> None:
+        print('Waiting...')
+        time.sleep(t)
+    ```
+  </Step>
+  
+  <Step title="Type check the function">
+    Mypy will verify that the function body matches the declared types:
+    
+    ```python
+    def add(a: int, b: int) -> int:
+        return a + b  # OK
+    
+    def bad_add(a: int, b: int) -> str:
+        return a + b  # Error: Incompatible return type
+    ```
+  </Step>
+</Steps>
+
+## Explicit types for collections
+
+The type checker cannot always infer the type of a list or dictionary. You may need to provide explicit type annotations:
+
+<CodeGroup>
+```python Empty collections
+l: list[int] = []       # Create empty list of int
+d: dict[str, int] = {}  # Create empty dictionary (str -> int)
+```
+
+```python With initial values
+names: list[str] = ["Alice", "Bob"]
+ages: dict[str, int] = {"Alice": 30, "Bob": 25}
+```
+</CodeGroup>
+
+<Note>
+Using type arguments (e.g., `list[int]`) on builtin collections only works in Python 3.9+. For Python 3.8 and earlier, use `List[int]`, `Dict[str, int]`, etc. from the `typing` module.
+</Note>
+
+## Context in type inference
+
+Type inference is bidirectional and takes context into account. Mypy will consider the type of the variable on the left-hand side when inferring the type of the expression on the right:
+
+```python
+def f(l: list[object]) -> None:
+    l = [1, 2]  # Infer type list[object] for [1, 2], not list[int]
+```
+
+## The `reveal_type` function
+
+Use `reveal_type()` to see what type mypy has inferred for an expression:
+
+```python
+value = 42
+reveal_type(value)  # Revealed type is "builtins.int"
+
+names = ["Alice", "Bob"]
+reveal_type(names)  # Revealed type is "builtins.list[builtins.str]"
+```
+
+<Warning>
+`reveal_type()` is only for debugging during type checking. It will cause a runtime error if executed.
+</Warning>
+
+## Silencing type errors
+
+You can disable type checking on specific lines using `# type: ignore` comments:
+
+```python
+app.run(8000)  # type: ignore  # `run()` in v2.0 accepts an `int`, as a port
+```
+
+For better clarity, specify the error code:
+
+```python
+app.run(8000)  # type: ignore[arg-type]
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Always annotate function signatures">
+    Even if mypy can infer types, explicit annotations make your code more readable and help catch errors earlier.
+  </Accordion>
+  
+  <Accordion title="Use the most specific type possible">
+    Instead of `list[object]`, use `list[str]` if you know the list contains strings.
+  </Accordion>
+  
+  <Accordion title="Avoid overusing Any">
+    The `Any` type disables type checking. Use it sparingly and only when necessary.
+  </Accordion>
+  
+  <Accordion title="Let mypy infer local variable types">
+    You usually don't need to annotate local variables if mypy can infer their types correctly.
+  </Accordion>
+</AccordionGroup>

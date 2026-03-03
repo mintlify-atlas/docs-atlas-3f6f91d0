@@ -1,0 +1,342 @@
+---
+title: dmypy
+description: Mypy daemon mode for faster incremental type checking
+---
+
+The `dmypy` command is a client for controlling the mypy daemon (server). Running mypy as a daemon can be **10x or more faster** than the regular command-line tool for large codebases, especially for incremental checks.
+
+## How it works
+
+The daemon keeps program state cached in memory and uses fine-grained dependency tracking to minimize reprocessing. This makes subsequent type checking runs much faster after the initial run.
+
+<Note>
+Each mypy daemon process supports one user and one set of source files, and can only process one type checking request at a time.
+</Note>
+
+## Basic usage
+
+```bash
+# Start daemon and check files (recommended)
+dmypy run -- prog.py pkg/*.py
+
+# The daemon automatically restarts if configuration or mypy version changes
+dmypy run -- --strict mycode.py
+```
+
+## Daemon lifecycle commands
+
+<ParamField path="run" type="command">
+  Check files, starting or restarting the daemon if needed. This is the recommended command for most workflows.
+  
+  ```bash
+  dmypy run -- <mypy-flags> <files>
+  ```
+</ParamField>
+
+<ParamField path="start" type="command">
+  Start the daemon but do not check any files.
+  
+  ```bash
+  dmypy start -- <mypy-flags>
+  ```
+</ParamField>
+
+<ParamField path="restart" type="command">
+  Restart the daemon. Equivalent to stop followed by start.
+  
+  ```bash
+  dmypy restart -- <mypy-flags>
+  ```
+</ParamField>
+
+<ParamField path="stop" type="command">
+  Stop the daemon.
+  
+  ```bash
+  dmypy stop
+  ```
+</ParamField>
+
+<ParamField path="kill" type="command">
+  Kill the daemon process.
+  
+  ```bash
+  dmypy kill
+  ```
+</ParamField>
+
+<ParamField path="status" type="command">
+  Check whether a daemon is running.
+  
+  ```bash
+  dmypy status
+  dmypy status -v  # Verbose output
+  ```
+</ParamField>
+
+## Type checking commands
+
+<ParamField path="check" type="command">
+  Check a list of files using an already running daemon.
+  
+  ```bash
+  dmypy check file1.py file2.py
+  dmypy check --export-types src/
+  ```
+</ParamField>
+
+<ParamField path="recheck" type="command">
+  Re-check the same set of files as the most recent check or recheck command.
+  
+  ```bash
+  dmypy recheck
+  dmypy recheck --update file.py  # Add or re-check specific file
+  dmypy recheck --remove file.py  # Remove file from check set
+  ```
+</ParamField>
+
+## Inspection commands
+
+<ParamField path="suggest" type="command">
+  Suggest a signature or show call sites for a specific function.
+  
+  ```bash
+  dmypy suggest module.function
+  dmypy suggest /path/to/file.py:42
+  dmypy suggest --json module.function
+  ```
+</ParamField>
+
+<ParamField path="inspect" type="command">
+  Locate and statically inspect expression(s).
+  
+  ```bash
+  dmypy inspect path/to/file.py:line:column
+  dmypy inspect --show attrs file.py:10:5
+  dmypy inspect --show definition file.py:10:5
+  ```
+</ParamField>
+
+## Common flags
+
+<ParamField path="--status-file FILE" type="string">
+  Use FILE as the status file for storing daemon runtime state.
+  
+  Default: `.dmypy.json` in current directory
+</ParamField>
+
+<ParamField path="--timeout TIMEOUT" type="number">
+  Server shutdown timeout in seconds. Automatically shut down after TIMEOUT seconds of inactivity.
+  
+  Available for: `start`, `restart`, `run` commands
+</ParamField>
+
+<ParamField path="--log-file FILE" type="string">
+  Direct daemon stdout/stderr to FILE. Useful for debugging daemon crashes.
+  
+  Available for: `start`, `restart`, `run` commands
+</ParamField>
+
+<ParamField path="-V, --version" type="boolean">
+  Show program's version number and exit.
+</ParamField>
+
+## Check and recheck flags
+
+<ParamField path="-v, --verbose" type="boolean">
+  Print detailed status.
+</ParamField>
+
+<ParamField path="--junit-xml FILE" type="string">
+  Write junit.xml to the given file.
+</ParamField>
+
+<ParamField path="--perf-stats-file FILE" type="string">
+  Write performance information to the given file.
+</ParamField>
+
+<ParamField path="--export-types" type="boolean">
+  Store types of all expressions in a shared location (useful for inspections).
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--update FILE" type="string">
+  Re-check FILE, or add it to the set of files being checked. May be repeated.
+  
+  Only available for `recheck` command.
+</ParamField>
+
+<ParamField path="--remove FILE" type="string">
+  Remove FILE from the set of files being checked. May be repeated.
+  
+  Only available for `recheck` command.
+</ParamField>
+
+## Status command flags
+
+<ParamField path="--fswatcher-dump-file FILE" type="string">
+  Collect information about the current file state and write to FILE as JSON.
+</ParamField>
+
+## Suggest command flags
+
+<ParamField path="--json" type="boolean">
+  Produce json that pyannotate can use to apply a suggestion.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-errors" type="boolean">
+  Only produce suggestions that cause no errors.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-any" type="boolean">
+  Only produce suggestions that don't contain Any.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--flex-any SCORE" type="number">
+  Allow anys in types if they go above a certain score (0-1).
+</ParamField>
+
+<ParamField path="--callsites" type="boolean">
+  Find callsites instead of suggesting a type.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--use-fixme NAME" type="string">
+  A dummy name to use instead of Any for types that can't be inferred.
+</ParamField>
+
+<ParamField path="--max-guesses NUM" type="number">
+  Set the maximum number of types to try for a function.
+  
+  Default: `64`
+</ParamField>
+
+## Inspect command flags
+
+<ParamField path="--show INSPECTION" type="string">
+  What kind of inspection to run.
+  
+  Choices: `type`, `attrs`, `definition`
+  
+  Default: `type`
+</ParamField>
+
+<ParamField path="-v, --verbose" type="boolean">
+  Increase verbosity of the type string representation. Can be repeated.
+</ParamField>
+
+<ParamField path="--limit NUM" type="number">
+  Return at most NUM innermost expressions (if position is given). 0 means no limit.
+  
+  Default: `0`
+</ParamField>
+
+<ParamField path="--include-span" type="boolean">
+  Prepend each inspection result with the span of corresponding expression.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--include-kind" type="boolean">
+  Prepend each inspection result with the kind of corresponding expression.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--include-object-attrs" type="boolean">
+  Include attributes of "object" in "attrs" inspection.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--union-attrs" type="boolean">
+  Include attributes valid for some of possible expression types.
+  
+  Default: `false` (intersection returned)
+</ParamField>
+
+<ParamField path="--force-reload" type="boolean">
+  Re-parse and re-type-check file before inspection (may be slow).
+  
+  Default: `false`
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash Start and check
+# Recommended: use 'run' to automatically start daemon
+dmypy run -- --strict mycode.py
+
+# Output
+Daemon started
+Success: no issues found in 1 source file
+```
+
+```bash Manual daemon control
+# Start daemon with flags
+dmypy start -- --strict
+
+# Check files
+dmypy check src/ tests/
+
+# Recheck after edits
+dmypy recheck
+
+# Stop daemon
+dmypy stop
+```
+
+```bash Inspect types
+# Export types for faster inspection
+dmypy run -- --export-types src/
+
+# Inspect expression type
+dmypy inspect src/main.py:42:10
+
+# Show attributes
+dmypy inspect --show attrs src/main.py:42:10
+
+# Show definition location
+dmypy inspect --show definition src/main.py:42:10
+```
+
+```bash Suggest signatures
+# Suggest type for a function
+dmypy suggest mymodule.process_data
+
+# Output JSON for pyannotate
+dmypy suggest --json mymodule.process_data
+
+# Find call sites
+dmypy suggest --callsites mymodule.process_data
+```
+
+```bash With timeout
+# Auto-shutdown after 300 seconds of inactivity
+dmypy run --timeout 300 -- src/
+```
+</CodeGroup>
+
+<Tip>
+For best performance with `dmypy inspect`, always use `--export-types` when checking files. This pre-computes type information for faster lookups.
+</Tip>
+
+<Warning>
+The daemon requires `--local-partial-types` and automatically enables it. This may affect type inference behavior compared to regular mypy.
+</Warning>
+
+## Performance tips
+
+1. **Use `dmypy run`**: This automatically handles daemon lifecycle and restarts when needed
+2. **Enable `--export-types`**: Pre-compute types for faster inspections
+3. **Use `--update`/`--remove`**: With an external file watcher for maximum speed on large codebases
+4. **Set `--timeout`**: Automatically clean up idle daemon processes

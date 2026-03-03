@@ -1,0 +1,361 @@
+---
+title: Inline configuration
+description: Use inline comments to configure Mypy on a per-file and per-line basis
+---
+
+Mypy supports setting per-file configuration options inside files themselves using `# mypy:` comments. Inline configuration takes the highest precedence over all other configuration mechanisms.
+
+## File-level configuration
+
+Place configuration comments at the top of a file to apply settings to the entire file.
+
+<CodeGroup>
+
+```python Basic example
+# mypy: disallow-any-generics
+
+from typing import List
+
+def process_items(items: List) -> None:  # Error: Missing type parameters
+    pass
+```
+
+```python Multiple options
+# mypy: disallow-untyped-defs, warn-return-any
+
+def calculate(x, y):  # Error: Function is missing type annotations
+    return x + y
+```
+
+```python With values
+# mypy: always-true=DEBUG, always-false=PRODUCTION
+
+if DEBUG:
+    print("Debug mode enabled")
+```
+
+</CodeGroup>
+
+## Configuration comment format
+
+Inline configuration follows these rules:
+
+### Flag names
+
+Flags correspond to config file flags but allow hyphens to be substituted for underscores.
+
+```python
+# mypy: disallow-any-generics
+# Equivalent to: disallow_any_generics = True in config file
+```
+
+### Values
+
+Values are specified using `=`, but `= True` may be omitted for boolean flags:
+
+<CodeGroup>
+
+```python Boolean flags
+# mypy: disallow-any-generics
+# Same as: disallow-any-generics=True
+```
+
+```python With explicit value
+# mypy: always-true=FOO
+```
+
+```python Quoted values
+# mypy: always-false="FOO,BAR"
+# Use quotes to include commas in values
+```
+
+</CodeGroup>
+
+### Multiple flags
+
+Separate multiple flags with commas or place them on separate lines:
+
+<CodeGroup>
+
+```python Comma-separated
+# mypy: disallow-untyped-defs, warn-return-any, strict-optional
+```
+
+```python Separate lines
+# mypy: disallow-untyped-defs
+# mypy: warn-return-any
+# mypy: strict-optional
+```
+
+</CodeGroup>
+
+### Inverting options
+
+Boolean options can be inverted by adding `no-` or swapping `disallow`/`allow` prefixes:
+
+```python
+# mypy: allow-untyped-defs, no-strict-optional
+# Equivalent to:
+# mypy: disallow-untyped-defs=False, strict-optional=False
+```
+
+## Line-level type ignores
+
+Use `# type: ignore` comments to suppress errors on specific lines.
+
+### Basic type ignore
+
+```python
+import untyped_library  # type: ignore
+```
+
+### Error code-specific ignores
+
+Specify error codes to ignore only specific errors:
+
+<CodeGroup>
+
+```python Single error code
+from foolib import foo  # type: ignore[attr-defined]
+```
+
+```python Multiple error codes
+result = complex_operation()  # type: ignore[arg-type, return-value]
+```
+
+```python With explanation
+data = legacy_function()  # type: ignore[no-untyped-call]  # TODO: Add types to legacy code
+```
+
+</CodeGroup>
+
+<Info>
+Using error code-specific ignores is recommended to avoid accidentally suppressing other errors.
+</Info>
+
+## Common inline configurations
+
+### Disabling type checking for a file
+
+```python
+# mypy: ignore-errors
+
+# All type errors in this file will be suppressed
+def untyped_function(x, y):
+    return x + y
+```
+
+<Warning>
+Use `ignore-errors` sparingly. It's better to gradually add types than to completely disable checking.
+</Warning>
+
+### Enabling strict mode for a file
+
+```python
+# mypy: strict=True
+# Or enable individual strict checks:
+# mypy: disallow-untyped-defs, disallow-any-generics, warn-return-any
+
+from typing import List
+
+def process(items: List[str]) -> None:
+    for item in items:
+        print(item)
+```
+
+### Module-specific import handling
+
+```python
+# mypy: ignore-missing-imports
+
+import some_untyped_library
+import another_untyped_package
+```
+
+### Adjusting error codes
+
+```python
+# mypy: enable-error-code="truthy-bool, ignore-without-code"
+# mypy: disable-error-code="misc"
+
+def example() -> None:
+    if []:
+        pass  # Error: empty list is always False (truthy-bool enabled)
+```
+
+## Supported options
+
+Most configuration file options are supported inline. However, some restrictions apply:
+
+<Accordion title="Not supported in inline config">
+  These options cannot be used in inline configuration:
+  
+  - `python_version` - Must be set globally
+  - `strict` - Not supported inline; use individual flags instead
+  - Report generation options (`any_exprs_report`, `html_report`, etc.)
+</Accordion>
+
+<Accordion title="Per-module options">
+  These options are commonly used inline:
+  
+  - `ignore_errors`
+  - `ignore_missing_imports`
+  - `follow_imports`
+  - `disallow_untyped_defs`
+  - `disallow_untyped_calls`
+  - `check_untyped_defs`
+  - `warn_return_any`
+  - `warn_unused_ignores`
+  - `enable_error_code`
+  - `disable_error_code`
+</Accordion>
+
+## Configuration precedence
+
+Inline configuration has the highest precedence:
+
+1. **Inline configuration** (`# mypy:` comments) - Highest precedence
+2. Per-module configuration sections (most specific pattern)
+3. Per-module configuration sections (less specific patterns)
+4. Command-line options
+5. Global configuration file options - Lowest precedence
+
+<CodeGroup>
+
+```python example.py
+# mypy: disallow-untyped-defs
+# This overrides all other settings
+
+def function(x: int) -> int:
+    return x * 2
+```
+
+```ini mypy.ini
+[mypy]
+disallow_untyped_defs = False  # Overridden by inline config
+
+[mypy-example]
+disallow_untyped_defs = False  # Also overridden by inline config
+```
+
+</CodeGroup>
+
+## Best practices
+
+<Accordion title="Use error code-specific ignores">
+  Always specify error codes when using `# type: ignore`:
+  
+  ```python
+  # Good
+  from legacy import foo  # type: ignore[import-not-found]
+  
+  # Avoid
+  from legacy import foo  # type: ignore
+  ```
+  
+  This prevents accidentally suppressing other errors.
+</Accordion>
+
+<Accordion title="Document why you're ignoring errors">
+  Add explanatory comments when using type ignores:
+  
+  ```python
+  # type: ignore[arg-type]  # TODO: Fix after refactoring API
+  # type: ignore[no-untyped-def]  # Third-party code, cannot modify
+  ```
+</Accordion>
+
+<Accordion title="Prefer configuration files for project-wide settings">
+  Use inline configuration for file-specific overrides, not project-wide settings:
+  
+  ```python
+  # Good: File-specific override
+  # mypy: ignore-errors
+  # This is a generated file
+  
+  # Avoid: Use config file instead
+  # mypy: disallow-untyped-defs
+  # (Every file in your project shouldn't need this)
+  ```
+</Accordion>
+
+<Accordion title="Use inline config for incremental adoption">
+  When gradually adding types to a codebase, use inline configuration to enable strict checking on new/refactored files:
+  
+  ```python
+  # mypy: disallow-untyped-defs, warn-return-any
+  # This module has been fully typed
+  
+  from typing import List
+  
+  def process(items: List[str]) -> None:
+      ...
+  ```
+</Accordion>
+
+## Error handling examples
+
+### Ignoring import errors
+
+```python
+# Ignore missing imports for untyped third-party libraries
+from untyped_library import helper  # type: ignore[import-not-found]
+
+# Ignore all import-related errors in this file
+# mypy: ignore-missing-imports
+import pkg1
+import pkg2
+import pkg3
+```
+
+### Handling legacy code
+
+```python
+# mypy: allow-untyped-defs, allow-untyped-calls
+# Legacy module - gradually adding types
+
+def legacy_function(x, y):
+    return x + y
+
+def typed_function(x: int, y: int) -> int:
+    # No error calling untyped function (allow-untyped-calls)
+    return legacy_function(x, y)
+```
+
+### Test files
+
+```python
+# mypy: disable-error-code="no-untyped-def"
+# Test file - fixtures may not be fully typed
+
+import pytest
+
+@pytest.fixture
+def sample_data():
+    return {"key": "value"}
+
+def test_feature(sample_data):
+    assert sample_data["key"] == "value"
+```
+
+## Combining with error codes
+
+Inline configuration works well with error code management:
+
+```python
+# mypy: enable-error-code="truthy-bool,redundant-expr"
+# mypy: disable-error-code="misc"
+
+def validate(data: list[str]) -> bool:
+    if not data:  # OK: proper None/empty check
+        return False
+    
+    if data:  # Error: list is always truthy (redundant-expr)
+        return True
+    
+    return False
+```
+
+<Tip>
+Combine `enable-error-code` in configuration files with per-file `disable-error-code` for fine-grained control.
+</Tip>

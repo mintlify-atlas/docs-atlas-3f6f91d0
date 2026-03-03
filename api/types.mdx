@@ -1,0 +1,524 @@
+---
+title: Type system API
+description: Core type classes and utilities in Mypy's type system
+---
+
+Mypy's type system is built on a hierarchy of type classes defined in `mypy.types`. These classes represent all the different kinds of types that Mypy can reason about.
+
+## Base type class
+
+### Type
+
+The abstract base class for all types in Mypy.
+
+```python
+class Type(mypy.nodes.Context):
+    """Abstract base class for all types."""
+    
+    @property
+    def can_be_true(self) -> bool:
+        """Whether this type can be true in a boolean context."""
+    
+    @property
+    def can_be_false(self) -> bool:
+        """Whether this type can be false in a boolean context."""
+    
+    def accept(self, visitor: TypeVisitor[T]) -> T:
+        """Visitor pattern for type traversal."""
+    
+    def serialize(self) -> JsonDict | str:
+        """Serialize type to JSON format."""
+    
+    @classmethod
+    def deserialize(cls, data: JsonDict) -> Type:
+        """Deserialize type from JSON format."""
+```
+
+<Note>
+  The `can_be_true` and `can_be_false` properties are used for narrowing types in boolean contexts, such as `if x:` expressions.
+</Note>
+
+## Proper types
+
+### ProperType
+
+Base class for all concrete types (not type aliases).
+
+```python
+class ProperType(Type):
+    """Not a type alias. Every type except TypeAliasType inherits from this."""
+```
+
+All concrete type classes inherit from `ProperType` to distinguish them from `TypeAliasType`.
+
+## Common type classes
+
+### AnyType
+
+Represents the `Any` type, which is compatible with all other types.
+
+```python
+class AnyType(ProperType):
+    def __init__(
+        self,
+        type_of_any: int,
+        source_any: AnyType | None = None,
+        missing_import_name: str | None = None,
+        line: int = -1,
+        column: int = -1,
+    ) -> None: ...
+```
+
+<ParamField path="type_of_any" type="int" required>
+  The kind of `Any` type. Common values from `TypeOfAny`:
+  - `TypeOfAny.unannotated` (1): Inferred without annotation
+  - `TypeOfAny.explicit` (2): Explicit `Any` annotation
+  - `TypeOfAny.from_unimported_type` (3): From unfollowed import
+  - `TypeOfAny.from_omitted_generics` (4): From omitted generic parameters
+  - `TypeOfAny.from_error` (5): From a type error
+</ParamField>
+
+<ParamField path="source_any" type="AnyType | None">
+  If this `Any` resulted from another `Any`, tracks the source
+</ParamField>
+
+<ParamField path="missing_import_name" type="str | None">
+  For `from_unimported_type`, the name of the missing import
+</ParamField>
+
+### NoneType
+
+Represents the type of `None`.
+
+```python
+class NoneType(ProperType):
+    """The type of 'None'. Can be written by users as 'None'."""
+    
+    def __init__(self, line: int = -1, column: int = -1) -> None: ...
+    
+    def can_be_true_default(self) -> bool:
+        return False  # None is always falsy
+```
+
+### UnionType
+
+Represents a union of types (e.g., `int | str`).
+
+```python
+class UnionType(ProperType):
+    """Union type (e.g. int | str)."""
+    
+    def __init__(self, items: Sequence[Type], line: int = -1, column: int = -1) -> None:
+        self.items = items
+```
+
+### Instance
+
+Represents an instance of a class.
+
+```python
+class Instance(ProperType):
+    """An instance type such as int or list[str]."""
+    
+    def __init__(
+        self,
+        typ: mypy.nodes.TypeInfo,
+        args: Sequence[Type],
+        line: int = -1,
+        column: int = -1,
+    ) -> None:
+        self.type = typ
+        self.args = args
+```
+
+<ParamField path="typ" type="TypeInfo" required>
+  The class definition
+</ParamField>
+
+<ParamField path="args" type="Sequence[Type]" required>
+  Type arguments for generics (e.g., `[int]` for `list[int]`)
+</ParamField>
+
+## Type variables
+
+### TypeVarType
+
+Represents a type variable.
+
+```python
+class TypeVarType(TypeVarLikeType):
+    """Type that refers to a type variable."""
+    
+    def __init__(
+        self,
+        name: str,
+        fullname: str,
+        id: TypeVarId,
+        values: list[Type],
+        upper_bound: Type,
+        default: Type,
+        variance: int = INVARIANT,
+        line: int = -1,
+        column: int = -1,
+    ) -> None: ...
+```
+
+<ParamField path="name" type="str" required>
+  Name of the type variable (e.g., `'T'`)
+</ParamField>
+
+<ParamField path="values" type="list[Type]" required>
+  Value restriction (empty list if unrestricted)
+</ParamField>
+
+<ParamField path="upper_bound" type="Type" required>
+  Upper bound constraint
+</ParamField>
+
+<ParamField path="variance" type="int">
+  Variance: `INVARIANT`, `COVARIANT`, or `CONTRAVARIANT`
+</ParamField>
+
+### ParamSpecType
+
+Represents a ParamSpec type variable for callable signatures.
+
+```python
+class ParamSpecType(TypeVarLikeType):
+    """Type that refers to a ParamSpec."""
+    
+    def __init__(
+        self,
+        name: str,
+        fullname: str,
+        id: TypeVarId,
+        flavor: int,
+        upper_bound: Type,
+        default: Type,
+        *,
+        line: int = -1,
+        column: int = -1,
+        prefix: Parameters | None = None,
+    ) -> None: ...
+```
+
+<ParamField path="flavor" type="int" required>
+  One of:
+  - `ParamSpecFlavor.BARE` (0): Simple reference `P`
+  - `ParamSpecFlavor.ARGS` (1): `P.args`
+  - `ParamSpecFlavor.KWARGS` (2): `P.kwargs`
+</ParamField>
+
+### TypeVarTupleType
+
+Represents a TypeVarTuple for variadic generics.
+
+```python
+class TypeVarTupleType(TypeVarLikeType):
+    """Type that refers to a TypeVarTuple. See PEP 646."""
+    
+    def __init__(
+        self,
+        name: str,
+        fullname: str,
+        id: TypeVarId,
+        upper_bound: Type,
+        tuple_fallback: Instance,
+        default: Type,
+        *,
+        line: int = -1,
+        column: int = -1,
+        min_len: int = 0,
+    ) -> None: ...
+```
+
+## Callable types
+
+### CallableType
+
+Represents a callable type (function signature).
+
+```python
+class CallableType(ProperType):
+    """Type of a callable object (function)."""
+    
+    def __init__(
+        self,
+        arg_types: list[Type],
+        arg_kinds: list[ArgKind],
+        arg_names: list[str | None],
+        ret_type: Type,
+        fallback: Instance,
+        name: str | None = None,
+        *,
+        variables: list[TypeVarLikeType] = [],
+        line: int = -1,
+        column: int = -1,
+    ) -> None: ...
+```
+
+<ParamField path="arg_types" type="list[Type]" required>
+  Types of each argument
+</ParamField>
+
+<ParamField path="arg_kinds" type="list[ArgKind]" required>
+  Kinds of each argument:
+  - `ARG_POS`: Positional
+  - `ARG_OPT`: Optional positional  
+  - `ARG_STAR`: `*args`
+  - `ARG_NAMED`: Named only
+  - `ARG_STAR2`: `**kwargs`
+</ParamField>
+
+<ParamField path="arg_names" type="list[str | None]" required>
+  Names of arguments (None for positional-only)
+</ParamField>
+
+<ParamField path="ret_type" type="Type" required>
+  Return type of the callable
+</ParamField>
+
+## Literal types
+
+### LiteralType
+
+Represents a literal type (e.g., `Literal[42]`, `Literal["hello"]`).
+
+```python
+class LiteralType(ProperType):
+    """A type that represents a specific literal value."""
+    
+    def __init__(
+        self,
+        value: LiteralValue,  # int | str | bool | float
+        fallback: Instance,
+        line: int = -1,
+        column: int = -1,
+    ) -> None:
+        self.value = value
+        self.fallback = fallback
+```
+
+## Type aliases
+
+### TypeAliasType
+
+Represents a reference to a type alias.
+
+```python
+class TypeAliasType(Type):
+    """A type alias to another type."""
+    
+    def __init__(
+        self,
+        alias: mypy.nodes.TypeAlias | None,
+        args: list[Type],
+        line: int = -1,
+        column: int = -1,
+    ) -> None:
+        self.alias = alias
+        self.args = args
+    
+    @property
+    def is_recursive(self) -> bool:
+        """Whether this type alias is recursive."""
+```
+
+<Note>
+  Type aliases support recursive definitions. Use `is_recursive` to check if an alias references itself.
+</Note>
+
+## Tuple types
+
+### TupleType
+
+Represents a tuple type.
+
+```python
+class TupleType(ProperType):
+    """Type of a tuple."""
+    
+    def __init__(
+        self,
+        items: list[Type],
+        fallback: Instance,
+        *,
+        line: int = -1,
+        column: int = -1,
+    ) -> None:
+        self.items = items
+        self.fallback = fallback
+```
+
+## TypedDict
+
+### TypedDictType
+
+Represents a TypedDict type.
+
+```python
+class TypedDictType(ProperType):
+    """Type of a TypedDict."""
+    
+    def __init__(
+        self,
+        items: dict[str, Type],
+        required_keys: set[str],
+        fallback: Instance,
+        line: int = -1,
+        column: int = -1,
+    ) -> None:
+        self.items = items
+        self.required_keys = required_keys
+        self.fallback = fallback
+```
+
+## Utility types
+
+### UninhabitedType
+
+The bottom type with no values (used for `Never`/`NoReturn`).
+
+```python
+class UninhabitedType(ProperType):
+    """Type with no members (bottom type)."""
+    
+    def can_be_true_default(self) -> bool:
+        return False
+    
+    def can_be_false_default(self) -> bool:
+        return False
+```
+
+### DeletedType
+
+Type of deleted variables.
+
+```python
+class DeletedType(ProperType):
+    """Type of deleted variables (can be lvalues but not rvalues)."""
+```
+
+### UnpackType
+
+Represents the `Unpack` type operator from PEP 646.
+
+```python
+class UnpackType(ProperType):
+    """Type operator Unpack from PEP 646."""
+    
+    def __init__(
+        self,
+        typ: Type,
+        line: int = -1,
+        column: int = -1,
+        from_star_syntax: bool = False,
+    ) -> None:
+        self.type = typ
+        self.from_star_syntax = from_star_syntax
+```
+
+## Type utilities
+
+### get_proper_type()
+
+Expand type aliases to get the actual type.
+
+```python
+def get_proper_type(typ: Type | None) -> ProperType | None:
+    """Get the actual type behind a type alias."""
+```
+
+### get_proper_types()
+
+Expand all type aliases in a sequence.
+
+```python
+def get_proper_types(types: Iterable[Type | None]) -> list[ProperType | None]:
+    """Get proper types for a sequence."""
+```
+
+## Example usage
+
+### Creating type instances
+
+```python
+from mypy.types import Instance, UnionType, NoneType, AnyType, TypeOfAny
+from mypy.nodes import TypeInfo
+
+# Create a simple type
+none_type = NoneType()
+
+# Create an Any type
+any_type = AnyType(TypeOfAny.explicit)
+
+# Create a union type
+optional_int = UnionType([int_instance, none_type])
+```
+
+### Type visitor pattern
+
+```python
+from mypy.types import Type, TypeVisitor, Instance, UnionType
+
+class TypeCollector(TypeVisitor[list[Type]]):
+    """Collect all types in a type tree."""
+    
+    def visit_instance(self, t: Instance) -> list[Type]:
+        result = [t]
+        for arg in t.args:
+            result.extend(arg.accept(self))
+        return result
+    
+    def visit_union_type(self, t: UnionType) -> list[Type]:
+        result = [t]
+        for item in t.items:
+            result.extend(item.accept(self))
+        return result
+
+# Use the visitor
+collector = TypeCollector()
+types = some_type.accept(collector)
+```
+
+## Constants
+
+### Type name constants
+
+```python
+TUPLE_NAMES: Final = ("builtins.tuple", "typing.Tuple")
+TYPE_NAMES: Final = ("builtins.type", "typing.Type")
+PROTOCOL_NAMES: Final = ("typing.Protocol", "typing_extensions.Protocol")
+LITERAL_TYPE_NAMES: Final = ("typing.Literal", "typing_extensions.Literal")
+NEVER_NAMES: Final = (
+    "typing.NoReturn",
+    "typing_extensions.NoReturn",
+    "typing.Never",
+    "typing_extensions.Never",
+)
+```
+
+### Argument kinds
+
+```python
+ARG_POS: Final = 0  # Positional argument
+ARG_OPT: Final = 1  # Optional positional argument  
+ARG_STAR: Final = 2  # *args
+ARG_NAMED: Final = 3  # Keyword-only argument
+ARG_NAMED_OPT: Final = 4  # Optional keyword-only argument
+ARG_STAR2: Final = 5  # **kwargs
+```
+
+### Variance
+
+```python
+INVARIANT: Final = 0
+COVARIANT: Final = 1
+CONTRAVARIANT: Final = 2
+```
+
+## See also
+
+- [API overview](/api/overview) - General API information
+- [Error codes](/api/error-codes/overview) - Error classification system
+- [Type checking](/type-system) - How Mypy's type system works

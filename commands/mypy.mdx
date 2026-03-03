@@ -1,0 +1,545 @@
+---
+title: mypy
+description: Main mypy type checker command-line interface
+---
+
+The `mypy` command is the main entry point for type checking Python code. It analyzes your code statically and reports type errors without running the code.
+
+## Basic usage
+
+```bash
+mypy program.py
+mypy src/ tests/
+mypy -m mymodule
+mypy -p mypackage
+```
+
+## Specifying what to check
+
+<ParamField path="files" type="string">
+  Paths to files or directories to type check. Directories are checked recursively.
+</ParamField>
+
+<ParamField path="-m MODULE" type="string">
+  Type-check the provided module. This flag may be repeated multiple times.
+  
+  Mypy will not recursively type check submodules.
+</ParamField>
+
+<ParamField path="-p PACKAGE" type="string">
+  Type-check the provided package recursively. This flag may be repeated.
+  
+  Mypy will recursively type check all submodules of the provided package.
+</ParamField>
+
+<ParamField path="-c PROGRAM_TEXT" type="string">
+  Type-check the provided string as a program.
+</ParamField>
+
+## General options
+
+<ParamField path="-h, --help" type="boolean">
+  Show help message and exit.
+</ParamField>
+
+<ParamField path="-v, --verbose" type="boolean">
+  More verbose messages. Can be repeated for increased verbosity.
+</ParamField>
+
+<ParamField path="-V, --version" type="boolean">
+  Show program's version number and exit.
+</ParamField>
+
+<ParamField path="-O FORMAT, --output FORMAT" type="string">
+  Set a custom output format. Choices: `json`
+  
+  Default: text output
+</ParamField>
+
+## Config file
+
+<ParamField path="--config-file CONFIG_FILE" type="string">
+  Configuration file with `[mypy]` section.
+  
+  Default: `mypy.ini`, `.mypy.ini`, `pyproject.toml`, or `setup.cfg` in current directory
+</ParamField>
+
+<ParamField path="--warn-unused-configs" type="boolean">
+  Warn about unused `[mypy-<pattern>]` or `[[tool.mypy.overrides]]` config sections.
+</ParamField>
+
+## Import discovery
+
+<ParamField path="--ignore-missing-imports" type="boolean">
+  Silently ignore imports of missing modules.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--follow-untyped-imports" type="boolean">
+  Typecheck modules without stubs or py.typed marker.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--follow-imports" type="string">
+  How to treat imports.
+  
+  Choices: `normal`, `silent`, `skip`, `error`
+  
+  Default: `normal`
+</ParamField>
+
+<ParamField path="--python-executable EXECUTABLE" type="string">
+  Python executable used for finding PEP 561 compliant packages and stubs.
+</ParamField>
+
+<ParamField path="--no-site-packages" type="boolean">
+  Do not search for installed PEP 561 compliant packages.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-namespace-packages" type="boolean">
+  Disable support for namespace packages (PEP 420, __init__.py-less).
+  
+  Default: `false` (namespace packages enabled)
+</ParamField>
+
+## Platform configuration
+
+<ParamField path="--python-version X.Y" type="string">
+  Type check code assuming it will be running on Python X.Y.
+  
+  Example: `--python-version 3.11`
+</ParamField>
+
+<ParamField path="--platform PLATFORM" type="string">
+  Type check special-cased code for the given OS platform.
+  
+  Default: `sys.platform`
+</ParamField>
+
+<ParamField path="--always-true NAME" type="string">
+  Additional variable to be considered True. May be repeated.
+</ParamField>
+
+<ParamField path="--always-false NAME" type="string">
+  Additional variable to be considered False. May be repeated.
+</ParamField>
+
+## Disallow dynamic typing
+
+<ParamField path="--disallow-any-unimported" type="boolean">
+  Disallow Any types resulting from unfollowed imports.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disallow-any-expr" type="boolean">
+  Disallow all expressions that have type Any.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disallow-any-decorated" type="boolean">
+  Disallow functions that have Any in their signature after decorator transformation.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disallow-any-explicit" type="boolean">
+  Disallow explicit Any in type positions.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disallow-any-generics" type="boolean">
+  Disallow usage of generic types that do not specify explicit type parameters.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disallow-subclassing-any" type="boolean">
+  Disallow subclassing values of type 'Any' when defining classes.
+  
+  Default: `false`
+</ParamField>
+
+## Untyped definitions and calls
+
+<ParamField path="--disallow-untyped-calls" type="boolean">
+  Disallow calling functions without type annotations from functions with type annotations.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--untyped-calls-exclude MODULE" type="string">
+  Disable --disallow-untyped-calls for functions/methods from specific package, module, or class. May be repeated.
+</ParamField>
+
+<ParamField path="--disallow-untyped-defs" type="boolean">
+  Disallow defining functions without type annotations or with incomplete type annotations.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disallow-incomplete-defs" type="boolean">
+  Disallow defining functions with incomplete type annotations.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--check-untyped-defs" type="boolean">
+  Type check the interior of functions without type annotations.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disallow-untyped-decorators" type="boolean">
+  Disallow decorating typed functions with untyped decorators.
+  
+  Default: `false`
+</ParamField>
+
+## None and optional handling
+
+<ParamField path="--implicit-optional" type="boolean">
+  Assume arguments with default values of None are Optional.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-strict-optional" type="boolean">
+  Disable strict Optional checks.
+  
+  Default: `false` (strict Optional enabled)
+</ParamField>
+
+## Configuring warnings
+
+<ParamField path="--warn-redundant-casts" type="boolean">
+  Warn about casting an expression to its inferred type.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--warn-unused-ignores" type="boolean">
+  Warn about unneeded '# type: ignore' comments.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-warn-no-return" type="boolean">
+  Do not warn about functions that end without returning.
+  
+  Default: `false` (warnings enabled)
+</ParamField>
+
+<ParamField path="--warn-return-any" type="boolean">
+  Warn about returning values of type Any from non-Any typed functions.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--warn-unreachable" type="boolean">
+  Warn about statements or expressions inferred to be unreachable.
+  
+  Default: `false`
+</ParamField>
+
+## Strictness flags
+
+<ParamField path="--strict" type="boolean">
+  Strict mode. Enables all strict flags: --warn-unused-configs, --disallow-any-generics, --disallow-subclassing-any, --disallow-untyped-calls, --disallow-untyped-defs, --disallow-incomplete-defs, --check-untyped-defs, --disallow-untyped-decorators, --warn-redundant-casts, --warn-unused-ignores, --warn-return-any, --no-implicit-reexport, --strict-equality, --strict-bytes, --extra-checks.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--allow-redefinition" type="boolean">
+  Allow restricted variable redefinition with a new type.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-implicit-reexport" type="boolean">
+  Treat imports as private unless aliased.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--strict-equality" type="boolean">
+  Prohibit equality, identity, and container checks for non-overlapping types.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--strict-bytes" type="boolean">
+  Disable treating bytearray and memoryview as subtypes of bytes.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--extra-checks" type="boolean">
+  Enable additional checks that are technically correct but may be impractical.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--disable-error-code NAME" type="string">
+  Disable a specific error code. May be repeated.
+</ParamField>
+
+<ParamField path="--enable-error-code NAME" type="string">
+  Enable a specific error code. May be repeated.
+</ParamField>
+
+## Error messages
+
+<ParamField path="--show-error-context" type="boolean">
+  Precede errors with "note:" messages explaining context.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--show-column-numbers" type="boolean">
+  Show column numbers in error messages.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--show-error-end" type="boolean">
+  Show end line/end column numbers in error messages. Implies --show-column-numbers.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--hide-error-codes" type="boolean">
+  Hide error codes in error messages.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--show-error-code-links" type="boolean">
+  Show links to error code documentation.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--pretty" type="boolean">
+  Use visually nicer output: soft word wrap, show source code snippets, and show error location markers.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-color-output" type="boolean">
+  Do not colorize error messages.
+  
+  Default: `false` (color enabled)
+</ParamField>
+
+<ParamField path="--no-error-summary" type="boolean">
+  Do not show error stats summary.
+  
+  Default: `false` (summary shown)
+</ParamField>
+
+<ParamField path="--show-absolute-path" type="boolean">
+  Show absolute paths to files.
+  
+  Default: `false`
+</ParamField>
+
+## Incremental mode
+
+<ParamField path="--no-incremental" type="boolean">
+  Disable module cache.
+  
+  Default: `false` (incremental mode enabled)
+</ParamField>
+
+<ParamField path="--cache-dir DIR" type="string">
+  Store module cache info in the given folder.
+  
+  Default: `.mypy_cache`
+</ParamField>
+
+<ParamField path="--sqlite-cache" type="boolean">
+  Use a sqlite database to store the cache.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--cache-fine-grained" type="boolean">
+  Include fine-grained dependency information in the cache for the mypy daemon.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--skip-version-check" type="boolean">
+  Allow using cache written by older mypy version.
+  
+  Default: `false`
+</ParamField>
+
+## Advanced options
+
+<ParamField path="--pdb" type="boolean">
+  Invoke pdb on fatal error.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--show-traceback, --tb" type="boolean">
+  Show traceback on fatal error.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--raise-exceptions" type="boolean">
+  Raise exception on fatal error.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--custom-typing-module MODULE" type="string">
+  Use a custom typing module.
+</ParamField>
+
+<ParamField path="--custom-typeshed-dir DIR" type="string">
+  Use the custom typeshed in DIR.
+</ParamField>
+
+<ParamField path="--warn-incomplete-stub" type="boolean">
+  Warn if missing type annotation in typeshed.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--shadow-file SOURCE_FILE SHADOW_FILE" type="string">
+  When encountering SOURCE_FILE, read and type check the contents of SHADOW_FILE instead.
+</ParamField>
+
+## Report generation
+
+<ParamField path="--any-exprs-report DIR" type="string">
+  Generate a text file report documenting expressions of type Any.
+</ParamField>
+
+<ParamField path="--cobertura-xml-report DIR" type="string">
+  Generate a Cobertura XML type checking coverage report.
+</ParamField>
+
+<ParamField path="--html-report DIR" type="string">
+  Generate an HTML type checking coverage report.
+</ParamField>
+
+<ParamField path="--linecount-report DIR" type="string">
+  Generate a text file report documenting typed and untyped functions and lines.
+</ParamField>
+
+<ParamField path="--linecoverage-report DIR" type="string">
+  Generate a JSON file mapping each source file to typed line numbers.
+</ParamField>
+
+<ParamField path="--txt-report DIR" type="string">
+  Generate a text file type checking coverage report.
+</ParamField>
+
+<ParamField path="--xml-report DIR" type="string">
+  Generate an XML type checking coverage report.
+</ParamField>
+
+## Running code
+
+<ParamField path="--explicit-package-bases" type="boolean">
+  Use current directory and MYPYPATH to determine module names of files passed.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--exclude PATTERN" type="string">
+  Regular expression to match file names, directory names or paths to ignore. May be repeated.
+</ParamField>
+
+<ParamField path="--exclude-gitignore" type="boolean">
+  Use .gitignore file(s) to exclude files from checking.
+  
+  Default: `false`
+</ParamField>
+
+## Miscellaneous
+
+<ParamField path="--install-types" type="boolean">
+  Install detected missing library stub packages using pip.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--non-interactive" type="boolean">
+  Install stubs without asking for confirmation and hide errors (with --install-types).
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--junit-xml FILE" type="string">
+  Write a JUnit XML test result document with type checking results to FILE.
+</ParamField>
+
+<ParamField path="--junit-format" type="string">
+  Specifies JUnit XML format: `global` (single test with all errors) or `per_file` (one test per file).
+  
+  Default: `global`
+</ParamField>
+
+<ParamField path="--scripts-are-modules" type="boolean">
+  Script x becomes module x instead of __main__.
+  
+  Default: `false`
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash Basic type checking
+mypy myprogram.py
+```
+
+```bash Check multiple files
+mypy file1.py file2.py directory/
+```
+
+```bash Check a module
+mypy -m mymodule
+```
+
+```bash Check a package recursively
+mypy -p mypackage
+```
+
+```bash Strict mode
+mypy --strict myprogram.py
+```
+
+```bash With custom config
+mypy --config-file mypy.ini src/
+```
+
+```bash Install missing stubs
+mypy --install-types --non-interactive .
+```
+</CodeGroup>
+
+## Environment variables
+
+<Info>
+**MYPYPATH**: Additional module search path entries (colon-separated).
+
+**MYPY_CACHE_DIR**: Override configuration cache_dir path.
+</Info>
+
+## Exit codes
+
+- `0`: Success, no type errors found
+- `1`: Type errors found
+- `2`: Fatal error or mypy encountered an issue

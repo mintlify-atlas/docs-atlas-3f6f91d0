@@ -1,0 +1,349 @@
+---
+title: Additional advanced features
+description: Advanced mypy features including dataclasses, attrs, and remote caching
+---
+
+## Dataclasses support
+
+The `dataclasses` module allows defining classes without boilerplate. Mypy provides full support for dataclasses through a built-in plugin.
+
+### Basic usage
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class Application:
+    name: str
+    plugins: list[str] = field(default_factory=list)
+
+test = Application("Testing...")  # OK
+bad = Application("Testing...", "with plugin")  # Error: list[str] expected
+```
+
+### Special method detection
+
+Mypy detects special methods based on dataclass flags:
+
+```python
+from dataclasses import dataclass
+
+@dataclass(order=True)
+class OrderedPoint:
+    x: int
+    y: int
+
+@dataclass(order=False)
+class UnorderedPoint:
+    x: int
+    y: int
+
+OrderedPoint(1, 2) < OrderedPoint(3, 4)  # OK
+UnorderedPoint(1, 2) < UnorderedPoint(3, 4)  # Error: Unsupported operand types
+```
+
+### Generic dataclasses
+
+Dataclasses can be generic (Python 3.12 syntax):
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class BoxedData[T]:
+    data: T
+    label: str
+
+def unbox[T](bd: BoxedData[T]) -> T:
+    return bd.data
+
+val = unbox(BoxedData(42, "<important>"))  # OK, inferred type is int
+```
+
+### Known issues
+
+<Warning>
+**Caveats:**
+
+- Some functions like `asdict()` have imprecise types
+- Aliases of `@dataclass` are not recognized
+- Dynamically computed decorators won't work
+</Warning>
+
+**This doesn't work:**
+
+```python
+from dataclasses import dataclass
+
+dataclass_alias = dataclass
+
+@dataclass_alias  # Mypy won't recognize this
+class AliasDecorated:
+    attribute: int
+
+AliasDecorated(attribute=1)  # Error: Unexpected keyword argument
+```
+
+### Dataclass transforms
+
+Use `@dataclass_transform` to make mypy recognize custom dataclass decorators:
+
+```python
+from dataclasses import dataclass, Field
+from typing import dataclass_transform
+
+@dataclass_transform(field_specifiers=(Field,))
+def my_dataclass[T](cls: type[T]) -> type[T]:
+    return dataclass(cls)
+
+@my_dataclass  # Mypy recognizes this
+class MyClass:
+    value: int
+```
+
+<Info>
+Mypy follows [PEP 681](https://www.python.org/dev/peps/pep-0681/) for dataclass transforms.
+</Info>
+
+<Note>
+Mypy assumes transformed classes have `__dataclass_fields__` and work with `is_dataclass()` and `fields()`, even if they don't at runtime.
+</Note>
+
+## The attrs package
+
+Mypy has built-in support for the attrs library:
+
+```python
+import attrs
+
+@attrs.define
+class A:
+    one: int
+    two: int = 7
+    three: int = attrs.field(8)
+```
+
+### Without auto_attribs
+
+When using `auto_attribs=False`, you must use `attrs.field`:
+
+```python
+import attrs
+
+@attrs.define
+class A:
+    one: int = attrs.field()          # Variable annotation
+    two = attrs.field()  # type: int  # Type comment
+    three = attrs.field(type=int)     # type= argument
+```
+
+### Type annotations
+
+Typeshed provides "white lie" annotations for better type checking:
+
+```python
+import attrs
+
+@attrs.define
+class A:
+    one: int = attrs.field(8)
+    two: dict[str, str] = attrs.Factory(dict)
+    bad: str = attrs.field(16)   # Error: can't assign int to str
+```
+
+<Tip>
+`attrs.field()` and `attrs.Factory()` are annotated to return the expected types, making type checking more intuitive.
+</Tip>
+
+### Attrs caveats
+
+<Warning>
+**Known issues:**
+
+- Helper functions wrapping `attrs.field()` won't be recognized
+- Boolean arguments must be literal `True` or `False`
+- `converter` only supports named functions
+- Validators and default decorators aren't type-checked against attributes
+- Generated methods overwrite existing definitions
+</Warning>
+
+**This won't work:**
+
+```python
+import attrs
+
+YES = True
+
+@attrs.define(init=YES)  # Error: mypy needs literal True/False
+class A:
+    value: int
+```
+
+## Remote cache for faster runs
+
+Mypy performs incremental type checking, but large codebases can still be slow. A remote cache can speed up runs by 10x or more.
+
+### How it works
+
+<Steps>
+
+### Shared repository
+
+Set up a repository for storing mypy cache files for all commits.
+
+### CI build
+
+Your CI uploads `.mypy_cache` directory to the shared repository for each commit.
+
+### Wrapper script
+
+Developers use a wrapper script that downloads cache data before running mypy.
+
+</Steps>
+
+### Setting up the shared repository
+
+You need a repository that:
+
+- Accepts cache file uploads from CI
+- Provides downloads based on commit ID
+- Could be CI build artifacts, S3, or a web server
+
+### CI build configuration
+
+Your CI script should:
+
+```bash
+# 1. Run mypy normally
+mypy <args>
+
+# 2. Create tarball from cache
+tar -czf mypy-cache.tar.gz .mypy_cache
+
+# 3. Get commit ID
+COMMIT_ID=$(git rev-parse HEAD)
+
+# 4. Upload tarball
+upload_cache mypy-cache.tar.gz $COMMIT_ID
+```
+
+### Wrapper script
+
+Create a script developers run instead of mypy:
+
+```bash mypy-with-cache.sh
+#!/bin/bash
+
+# Find merge base with main
+BASE_COMMIT=$(git merge-base HEAD origin/master)
+
+# Download cache for that commit
+download_cache $BASE_COMMIT
+
+# Extract cache
+tar -xzf mypy-cache.tar.gz
+
+# Run mypy normally
+mypy "$@"
+```
+
+<Info>
+The wrapper downloads cache from the most recent main branch commit your branch is based on.
+</Info>
+
+### Caching with mypy daemon
+
+To use remote caching with `dmypy`:
+
+```bash
+# In CI: Generate cache with fine-grained data
+mypy --cache-fine-grained <args>
+
+# Locally: Start daemon with fine-grained cache
+dmypy start -- --use-fine-grained-cache <options>
+
+# First check will be much faster
+dmypy check
+```
+
+<Warning>
+The daemon requires `--cache-fine-grained` in CI and `--use-fine-grained-cache` when starting.
+</Warning>
+
+### Refinements
+
+Optional improvements for large codebases:
+
+<Tip>
+**Optimizations:**
+
+- Skip download if merge base hasn't changed
+- Restart daemon when branch changes (faster than incremental update)
+- Look for cache from last 5 commits if latest isn't available
+- Fall back to normal build if cache unavailable
+- Use `--cache-dir` for multiple local branches
+- Cache CI builds too (but run full build to create cache data)
+</Tip>
+
+## Extended callable types
+
+<Warning>
+This feature is deprecated. Use [callback protocols](/essentials/protocols#callback-protocols) instead.
+</Warning>
+
+Extended callables support keyword arguments and optional parameters:
+
+```python
+from collections.abc import Callable
+from mypy_extensions import (Arg, DefaultArg, NamedArg,
+                             DefaultNamedArg, VarArg, KwArg)
+
+def func(__a: int,
+         b: int,
+         c: int = 0,
+         *args: int,
+         d: int,
+         e: int = 0,
+         **kwargs: int) -> int:
+    ...
+
+F = Callable[[int,                      # Or Arg(int)
+              Arg(int, 'b'),
+              DefaultArg(int, 'c'),
+              VarArg(int),
+              NamedArg(int, 'd'),
+              DefaultNamedArg(int, 'e'),
+              KwArg(int)],
+             int]
+
+f: F = func
+```
+
+### Argument specifiers
+
+Available in `mypy_extensions`:
+
+```python
+Arg(type=Any, name=None)              # Mandatory positional
+DefaultArg(type=Any, name=None)       # Optional positional
+NamedArg(type=Any, name=None)         # Mandatory keyword-only
+DefaultNamedArg(type=Any, name=None)  # Optional keyword-only
+VarArg(type=Any)                       # *args
+KwArg(type=Any)                        # **kwargs
+```
+
+<Note>
+Argument specifiers currently just return their `type` at runtime. The information isn't available at runtime.
+</Note>
+
+### Equivalences
+
+```python
+# These are equivalent:
+MyFunc = Callable[[int, str, int], float]
+MyFunc = Callable[[Arg(int), Arg(str), Arg(int)], float]
+
+# Unspecified arguments:
+MyOtherFunc = Callable[..., int]
+MyOtherFunc = Callable[[VarArg(), KwArg()], int]  # Roughly equivalent
+```

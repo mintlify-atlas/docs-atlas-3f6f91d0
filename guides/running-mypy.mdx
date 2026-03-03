@@ -1,0 +1,198 @@
+---
+title: Running mypy and managing imports
+description: Learn how to run mypy and specify which files to type check
+---
+
+This guide explains how to specify which files you want mypy to type check, how mypy discovers imported modules, and how to handle common issues.
+
+## Specifying code to be checked
+
+Mypy provides several ways to specify which files to type check:
+
+<Tabs>
+  <Tab title="Files and directories">
+    Pass paths to Python files and directories directly:
+
+    ```bash
+    mypy file_1.py foo/file_2.py file_3.pyi some/directory
+    ```
+
+    Mypy will recursively type check the entire contents of any provided directories.
+  </Tab>
+
+  <Tab title="Module names">
+    Use the `-m` or `--module` flag to specify a module name:
+
+    ```bash
+    mypy -m html.parser
+    ```
+
+    The module name is identical to what you would use in a Python import statement.
+  </Tab>
+
+  <Tab title="Package names">
+    Use the `-p` or `--package` flag to recursively check a package:
+
+    ```bash
+    mypy -p html
+    ```
+
+    This will recursively type check all submodules and subpackages, unlike `-m` which only checks the `__init__.py` file.
+  </Tab>
+
+  <Tab title="Code strings">
+    Use the `-c` or `--command` flag to type check code strings:
+
+    ```bash
+    mypy -c 'x = [1, 2]; print(x())'
+    ```
+
+    This is useful for quick testing. The above example will report that `list[int]` is not callable.
+  </Tab>
+</Tabs>
+
+### Multiple targets
+
+You can specify multiple packages and modules on the command line:
+
+```bash
+mypy --package p.a --package p.b --module c
+```
+
+### Reading from a file
+
+You can read additional command-line arguments from a file using the `@` prefix:
+
+```bash
+mypy @file_of_files.txt
+```
+
+This is more portable than using shell syntax like `mypy $(cat file_of_files.txt)`.
+
+### Using configuration files
+
+You can use the `files` option in your `mypy.ini` file to specify which files to check, then simply run `mypy` with no arguments.
+
+## How mypy finds imports
+
+<Steps>
+  <Step title="Check for stub files">
+    Mypy first looks for stub files (`.pyi`) in the same directory as the module.
+  </Step>
+
+  <Step title="Search MYPYPATH">
+    If not found, mypy searches directories in the `MYPYPATH` environment variable.
+  </Step>
+
+  <Step title="Check installed packages">
+    Mypy looks for installed packages that provide type information (PEP 561).
+  </Step>
+
+  <Step title="Search typeshed">
+    Finally, mypy searches the bundled typeshed for standard library stubs.
+  </Step>
+</Steps>
+
+## Module discovery
+
+Mypy uses an algorithm similar to Python's import system to locate modules:
+
+```bash
+# Set custom module search path
+export MYPYPATH=~/work/myproject/stubs
+
+# Run mypy
+mypy myproject
+```
+
+<Note>
+  Mypy resolves imports relative to the current working directory by default.
+</Note>
+
+## Mapping file paths to modules
+
+When you pass file paths to mypy, it maps them to module names:
+
+```bash
+# These are equivalent:
+mypy src/myapp/main.py
+mypy -m myapp.main  # If src is in PYTHONPATH
+```
+
+## Following imports
+
+By default, mypy follows all imports and type checks imported modules:
+
+<Accordion title="Control import following">
+  Use `follow_imports` configuration to control this behavior:
+
+  - `normal` - Follow imports and type check (default)
+  - `silent` - Follow imports but suppress errors
+  - `skip` - Don't follow imports at all
+  - `error` - Treat imports as errors
+
+  ```ini
+  [mypy-untyped_package.*]
+  follow_imports = skip
+  ```
+</Accordion>
+
+## Common import issues
+
+<Warning>
+  Avoid pointing `MYPYPATH` to the standard library or `site-packages`. This will likely cause many errors and may crash mypy.
+</Warning>
+
+### Cannot find module
+
+If mypy reports it cannot find a module:
+
+1. Check the module is installed in the environment where you run mypy
+2. Install stub packages for third-party libraries (e.g., `types-requests`)
+3. Use `ignore_missing_imports = True` for modules you can't type check
+4. Set `MYPYPATH` to include custom stub directories
+
+### Namespace packages
+
+For namespace packages without `__init__.py`:
+
+```bash
+mypy --namespace-packages mypackage
+```
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Use configuration files" icon="file-code">
+    Store mypy settings in `mypy.ini` or `pyproject.toml` for consistency across your team.
+  </Card>
+
+  <Card title="Pin mypy version" icon="lock">
+    Pin mypy version in your requirements to ensure consistent behavior in CI.
+  </Card>
+
+  <Card title="Run in CI" icon="circle-check">
+    Add mypy to your continuous integration pipeline to catch type errors early.
+  </Card>
+
+  <Card title="Use incremental mode" icon="forward">
+    Enable incremental mode for faster repeated checks on large codebases.
+  </Card>
+</CardGroup>
+
+## Performance tips
+
+<Tip>
+  Use daemon mode (`dmypy`) for much faster incremental checks during development:
+
+  ```bash
+  dmypy run -- myproject
+  ```
+</Tip>
+
+For large projects:
+
+- Use `--cache-dir` to specify a cache location
+- Enable incremental mode (on by default)
+- Consider using remote caching for CI environments
+- Use `--skip-version-check` if you're certain dependencies haven't changed

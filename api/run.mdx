@@ -1,0 +1,289 @@
+---
+title: mypy.api.run() and run_dmypy()
+description: Run Mypy programmatically from Python code
+---
+
+The `mypy.api` module provides two functions for running Mypy programmatically: `run()` for the standard type checker and `run_dmypy()` for the daemon client.
+
+## mypy.api.run()
+
+Runs Mypy's type checker with the specified command line arguments.
+
+### Function signature
+
+```python
+def run(args: list[str]) -> tuple[str, str, int]:
+    """
+    Run mypy type checker with command line arguments.
+    
+    Args:
+        args: Command line arguments (same as you would pass to mypy CLI)
+        
+    Returns:
+        A tuple of (stdout, stderr, exit_status)
+    """
+```
+
+### Parameters
+
+<ParamField path="args" type="list[str]" required>
+  Command line arguments to pass to Mypy. These are the same arguments you would pass when running `mypy` from the command line.
+  
+  **Example:** `['--strict', 'myfile.py']`
+</ParamField>
+
+### Return value
+
+Returns a tuple with three elements:
+
+<ResponseField name="stdout" type="str">
+  The normal report that Mypy writes to `sys.stdout`. Contains type checking results, success messages, and other informational output.
+</ResponseField>
+
+<ResponseField name="stderr" type="str">
+  The error report that Mypy writes to `sys.stderr`. Contains error messages and warnings about the type checking process itself.
+</ResponseField>
+
+<ResponseField name="exit_status" type="int">
+  The exit status code:
+  - `0`: Success (no errors found)
+  - Non-zero: Errors were found or an issue occurred
+</ResponseField>
+
+### Examples
+
+#### Basic usage
+
+```python
+from mypy import api
+
+# Check a single file
+result = api.run(['myfile.py'])
+print(f"Exit status: {result[2]}")
+if result[0]:
+    print(result[0])  # Type checking report
+```
+
+#### With strict mode
+
+```python
+from mypy import api
+
+# Run with strict checking
+result = api.run(['--strict', 'mypackage/'])
+
+if result[2] == 0:
+    print("Type checking passed!")
+else:
+    print("Type checking failed:")
+    print(result[0])
+```
+
+#### Checking multiple files
+
+```python
+from mypy import api
+
+files = ['module1.py', 'module2.py', 'module3.py']
+result = api.run(files)
+
+# Parse the output
+if result[0]:
+    for line in result[0].split('\n'):
+        if 'error:' in line:
+            print(line)
+```
+
+#### Using configuration options
+
+```python
+from mypy import api
+
+# Use custom config file
+result = api.run([
+    '--config-file', 'mypy-strict.ini',
+    '--show-column-numbers',
+    'src/'
+])
+```
+
+### Thread safety
+
+<Note>
+  The `run()` function is thread-safe. It uses internal mechanisms to capture stdout and stderr without modifying global state.
+</Note>
+
+## mypy.api.run_dmypy()
+
+Runs the dmypy daemon client with the specified arguments. The dmypy daemon provides faster incremental type checking by keeping analysis state in memory.
+
+### Function signature
+
+```python
+def run_dmypy(args: list[str]) -> tuple[str, str, int]:
+    """
+    Run dmypy daemon client with command line arguments.
+    
+    Args:
+        args: Command line arguments (same as you would pass to dmypy CLI)
+        
+    Returns:
+        A tuple of (stdout, stderr, exit_status)
+    """
+```
+
+### Parameters
+
+<ParamField path="args" type="list[str]" required>
+  Command line arguments to pass to dmypy. Common commands include:
+  - `['run', '--', 'file.py']`: Start daemon and check files
+  - `['check', 'file.py']`: Check files using existing daemon
+  - `['status']`: Show daemon status
+  - `['stop']`: Stop the daemon
+</ParamField>
+
+### Return value
+
+Returns the same tuple format as `run()`:
+
+<ResponseField name="stdout" type="str">
+  Normal output from the dmypy command
+</ResponseField>
+
+<ResponseField name="stderr" type="str">
+  Error output from the dmypy command  
+</ResponseField>
+
+<ResponseField name="exit_status" type="int">
+  Exit status code (0 for success)
+</ResponseField>
+
+### Examples
+
+#### Starting the daemon and checking files
+
+```python
+from mypy import api
+
+# Start daemon and check files
+result = api.run_dmypy(['run', '--', 'mypackage/'])
+print(f"Daemon check: {result[0]}")
+```
+
+#### Checking status
+
+```python
+from mypy import api
+
+# Check if daemon is running
+result = api.run_dmypy(['status'])
+if result[2] == 0:
+    print("Daemon is running")
+else:
+    print("Daemon is not running")
+```
+
+#### Incremental checking
+
+```python
+from mypy import api
+
+# First run - starts daemon
+api.run_dmypy(['run', '--', 'src/'])
+
+# Subsequent runs are faster
+result = api.run_dmypy(['check', 'src/'])
+print(f"Incremental check completed in: {result[0]}")
+```
+
+### Important limitations
+
+<Warning>
+  **Not thread-safe**: `run_dmypy()` modifies `sys.stdout` and `sys.stderr` during execution. Do not call this function from multiple threads simultaneously.
+</Warning>
+
+<Note>
+  The daemon stores state in a working directory (`.dmypy.json` by default). Make sure this location is writable and consistent across calls.
+</Note>
+
+## Comparison
+
+| Feature | `run()` | `run_dmypy()` |
+|---------|---------|---------------|
+| Thread-safe | Yes | No |
+| Incremental checking | No | Yes |
+| State management | Stateless | Maintains daemon state |
+| Performance | Standard | Faster for repeated checks |
+| Use case | One-off checks | Development workflows |
+
+## Common patterns
+
+### Error checking with exit codes
+
+```python
+from mypy import api
+
+def check_types(files: list[str]) -> bool:
+    """Check if files pass type checking."""
+    result = api.run(files)
+    return result[2] == 0
+
+if check_types(['app.py', 'utils.py']):
+    print("✓ All types check out")
+else:
+    print("✗ Type errors found")
+```
+
+### Capturing specific errors
+
+```python
+from mypy import api
+import re
+
+def get_errors(files: list[str]) -> list[str]:
+    """Extract error messages from type checking."""
+    result = api.run(files)
+    errors = []
+    
+    for line in result[0].split('\n'):
+        if re.search(r'error:', line):
+            errors.append(line)
+    
+    return errors
+
+errors = get_errors(['module.py'])
+for error in errors:
+    print(error)
+```
+
+### Integration with CI/CD
+
+```python
+from mypy import api
+import sys
+
+def ci_type_check(source_dir: str) -> None:
+    """Type check for CI/CD pipeline."""
+    result = api.run([
+        '--strict',
+        '--show-error-codes',
+        '--no-error-summary',
+        source_dir
+    ])
+    
+    if result[0]:
+        print(result[0])
+    if result[1]:
+        print(result[1], file=sys.stderr)
+    
+    sys.exit(result[2])
+
+if __name__ == '__main__':
+    ci_type_check('src/')
+```
+
+## See also
+
+- [Type system API](/api/types) - Working with Mypy's type classes
+- [Error codes](/api/error-codes/overview) - Understanding error classification
+- [Command line reference](/command-line) - All available Mypy options

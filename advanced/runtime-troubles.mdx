@@ -1,0 +1,377 @@
+---
+title: Runtime issues and workarounds
+description: Solve annotation runtime errors using string literals, TYPE_CHECKING, and future imports
+---
+
+## Overview
+
+Type annotations can sometimes cause runtime errors in Python. This guide shows how to resolve these issues using:
+
+- String literal types and type comments
+- `typing.TYPE_CHECKING`
+- `from __future__ import annotations` (PEP 563)
+
+## String literal types and type comments
+
+String literals prevent runtime evaluation of annotations:
+
+```python
+def f(a: list['A']) -> None: ...  # OK, prevents NameError
+
+class A: pass
+```
+
+<Info>
+Any type can be a string literal, and you can mix string and non-string types freely.
+</Info>
+
+### Type comments (deprecated)
+
+Type comments are the older syntax required before Python 3.6:
+
+```python
+a = 1  # type: int
+
+def f(x):  # type: (int) -> int
+    return x + 1
+
+# Alternative syntax for many arguments
+def send_email(
+     address,     # type: Union[str, List[str]]
+     sender,      # type: str
+     cc,          # type: Optional[List[str]]
+     subject='',
+     body=None    # type: List[str]
+):
+    # type: (...) -> bool
+    ...
+```
+
+<Note>
+Type comments can't cause runtime errors because comments aren't evaluated. They're never needed in stub files.
+</Note>
+
+<Warning>
+String literal types must be defined later **in the same module**. They can't resolve cross-module references.
+</Warning>
+
+## Future annotations import (PEP 563)
+
+Python 3.7+ offers automatic string literal-ification:
+
+```python
+from __future__ import annotations
+
+def f(x: A) -> None: ...  # OK, annotation not evaluated
+
+class A: ...
+```
+
+This will likely become the default in Python 3.14+.
+
+<Info>
+With `from __future__ import annotations`, all function and variable annotations are treated as strings automatically.
+</Info>
+
+### Limitations
+
+Even with the future import, some scenarios still need string literals:
+
+<Warning>
+**Still require string literals or special handling:**
+
+- Type aliases not using the `type` statement
+- Type narrowing expressions
+- Type definitions (`TypeVar`, `NewType`, `NamedTuple`)
+- Base classes
+</Warning>
+
+**Base class example:**
+
+```python
+from __future__ import annotations
+
+class A(tuple['B', 'C']): ...  # String literals still needed
+class B: ...
+class C: ...
+```
+
+### Dynamic evaluation warning
+
+Some libraries evaluate annotations at runtime:
+
+```python
+from __future__ import annotations
+import typing
+
+def f(x: int | str) -> None: ...  # PEP 604 syntax
+
+# This will fail on Python 3.9:
+typing.get_type_hints(f)  # TypeError: unsupported operand type(s)
+```
+
+<Tip>
+Be careful with `get_type_hints()` or `eval()` on annotations when using newer syntax with older Python versions.
+</Tip>
+
+## typing.TYPE_CHECKING
+
+The `TYPE_CHECKING` constant is `False` at runtime but `True` during type checking:
+
+```python
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Only executed by mypy, not at runtime
+    from expensive_module import RareType
+
+def process(x: 'RareType') -> None:
+    ...
+```
+
+<Info>
+Code inside `if TYPE_CHECKING:` is never executed at runtime, making it perfect for type-only imports.
+</Info>
+
+## Forward references
+
+Python doesn't allow class references before definition:
+
+```python
+def f(x: A) -> None: ...  # NameError: name "A" is not defined
+class A: ...
+```
+
+### Solution 1: Future import (Python 3.7+)
+
+```python
+from __future__ import annotations
+
+def f(x: A) -> None: ...  # OK
+class A: ...
+```
+
+### Solution 2: String literal (Python 3.6 and below)
+
+```python
+def f(x: 'A') -> None: ...  # OK
+
+# Or type comment
+def g(x):  # type: (A) -> None
+    ...
+
+class A: ...
+```
+
+### Solution 3: Reorder code
+
+Move the class definition before the function (not always possible).
+
+## Import cycles
+
+Import cycles occur when module A imports B and B imports A:
+
+```
+ImportError: cannot import name 'b' from partially initialized module 'A'
+(most likely due to a circular import)
+```
+
+### Solution: TYPE_CHECKING imports
+
+If imports are only needed for annotations:
+
+<CodeGroup>
+
+```python foo.py
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import bar
+
+def listify(arg: 'bar.BarClass') -> 'list[bar.BarClass]':
+    return [arg]
+```
+
+```python bar.py
+from foo import listify
+
+class BarClass:
+    def listifyme(self) -> 'list[BarClass]':
+        return listify(self)
+```
+
+</CodeGroup>
+
+<Note>
+You must use future import, string literals, or type comments when imports are inside `TYPE_CHECKING`.
+</Note>
+
+## Generic classes at runtime
+
+Some classes are generic in stubs but not at runtime.
+
+### Python 3.8 and earlier
+
+Classes like `os.PathLike` and `queue.Queue` can't be subscripted:
+
+```python
+from queue import Queue
+
+class Tasks(Queue[str]):  # TypeError: 'type' object is not subscriptable
+    ...
+
+results: Queue[int] = Queue()  # TypeError: 'type' object is not subscriptable
+```
+
+### Solution 1: Future import (annotations only)
+
+```python
+from __future__ import annotations
+from queue import Queue
+
+results: Queue[int] = Queue()  # OK
+```
+
+### Solution 2: TYPE_CHECKING (inheritance)
+
+```python
+from typing import TYPE_CHECKING
+from queue import Queue
+
+if TYPE_CHECKING:
+    BaseQueue = Queue[str]  # Only seen by mypy
+else:
+    BaseQueue = Queue  # Used at runtime
+
+class Tasks(BaseQueue):  # OK
+    ...
+
+task_queue: Tasks
+reveal_type(task_queue.get())  # Reveals str
+```
+
+### Generic subclasses
+
+For generic subclasses:
+
+```python
+from typing import TYPE_CHECKING, TypeVar, Generic
+from queue import Queue
+
+_T = TypeVar("_T")
+
+if TYPE_CHECKING:
+    class _MyQueueBase(Queue[_T]): pass
+else:
+    class _MyQueueBase(Generic[_T], Queue): pass
+
+class MyQueue(_MyQueueBase[_T]): pass
+
+task_queue: MyQueue[str]
+reveal_type(task_queue.get())  # Reveals str
+```
+
+<Info>
+Python 3.9+ implements `__class_getitem__` on these classes, so direct inheritance works.
+</Info>
+
+## Using types from stubs only
+
+Some types only exist in stubs:
+
+```python
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
+
+def f(x: SupportsRichComparison) -> None:
+    ...
+```
+
+<Warning>
+The `from __future__ import annotations` is required to avoid `NameError` when using the imported symbol.
+</Warning>
+
+## Generic builtins (Python 3.9+)
+
+Python 3.9 (PEP 585) allows subscripting built-in collections:
+
+```python
+from collections.abc import Sequence
+
+x: list[str]  # No need for typing.List
+y: dict[int, str]  # No need for typing.Dict
+z: Sequence[str] = x
+```
+
+### Limited Python 3.7+ support
+
+With `from __future__ import annotations`, this syntax works in annotations:
+
+```python
+from __future__ import annotations
+
+x: list[str]  # OK in annotations only
+```
+
+<Warning>
+Be aware this won't work at runtime on Python 3.7-3.8 if annotations are evaluated.
+</Warning>
+
+## Union syntax with | (Python 3.10+)
+
+Python 3.10 (PEP 604) allows `int | str` instead of `Union[int, str]`:
+
+```python
+x: int | str  # Python 3.10+
+```
+
+### Limited Python 3.7+ support
+
+Works with future import:
+
+```python
+from __future__ import annotations
+
+x: int | str  # OK in annotations, string literals, type comments, stubs
+```
+
+<Warning>
+Runtime evaluation on Python 3.7-3.9 will raise:
+```
+TypeError: unsupported operand type(s) for |: 'type' and 'type'
+```
+</Warning>
+
+## New typing module features
+
+Use `typing_extensions` for newer features on older Python:
+
+```python
+from typing_extensions import TypeIs  # Available on all Python versions
+```
+
+### Conditional imports
+
+For efficiency, import from `typing` when available:
+
+```python
+import sys
+
+if sys.version_info >= (3, 13):
+    from typing import TypeIs
+else:
+    from typing_extensions import TypeIs
+```
+
+Pair with dependency specification:
+
+```
+typing_extensions; python_version<"3.13"
+```
+
+<Tip>
+Always use `typing_extensions` for the latest typing features across Python versions.
+</Tip>

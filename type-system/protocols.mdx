@@ -1,0 +1,323 @@
+---
+title: Protocols and structural subtyping
+description: Learn about structural subtyping and how to define protocols in Mypy.
+---
+
+## Structural vs nominal subtyping
+
+Python's type system supports two ways of deciding whether two objects are compatible:
+
+<Tabs>
+  <Tab title="Nominal subtyping">
+    Strictly based on the class hierarchy. If class `Dog` inherits class `Animal`, it's a subtype of `Animal`.
+    
+    ```python
+    class Animal:
+        pass
+    
+    class Dog(Animal):
+        pass
+    
+    def feed(animal: Animal) -> None:
+        ...
+    
+    feed(Dog())  # OK - Dog inherits from Animal
+    ```
+  </Tab>
+  
+  <Tab title="Structural subtyping">
+    Based on the operations available. Class `Dog` is a structural subtype of class `Animal` if it has all attributes and methods of `Animal` with compatible types.
+    
+    ```python
+    from typing import Protocol
+    
+    class Animal(Protocol):
+        def make_sound(self) -> str: ...
+    
+    class Dog:  # No inheritance!
+        def make_sound(self) -> str:
+            return "Woof"
+    
+    def make_animal_sound(animal: Animal) -> None:
+        print(animal.make_sound())
+    
+    make_animal_sound(Dog())  # OK - Duck typing!
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+Structural subtyping is the static equivalent of duck typing, which is well known to Python programmers.
+</Info>
+
+## Predefined protocols
+
+The `collections.abc` and `typing` modules define various protocol classes:
+
+```python
+from collections.abc import Iterator, Iterable
+
+class IntList:
+    def __init__(self, value: int, next: IntList | None) -> None:
+        self.value = value
+        self.next = next
+    
+    def __iter__(self) -> Iterator[int]:
+        current = self
+        while current:
+            yield current.value
+            current = current.next
+
+def print_numbered(items: Iterable[int]) -> None:
+    for n, x in enumerate(items):
+        print(n + 1, x)
+
+print_numbered(IntList(3, IntList(5, None)))  # OK
+print_numbered([4, 5])  # Also OK
+```
+
+See the [predefined protocols reference](/type-system/protocols#predefined-protocol-reference) for a complete list.
+
+## User-defined protocols
+
+You can define your own protocol class by inheriting from `Protocol`:
+
+```python
+from collections.abc import Iterable
+from typing import Protocol
+
+class SupportsClose(Protocol):
+    def close(self) -> None: ...  # Empty method body
+
+class Resource:  # No SupportsClose base class!
+    def close(self) -> None:
+        self.resource.release()
+    # ... other methods ...
+
+def close_all(items: Iterable[SupportsClose]) -> None:
+    for item in items:
+        item.close()
+
+close_all([Resource(), open('some/file')])  # OK
+```
+
+<Note>
+`Resource` is a subtype of `SupportsClose` because it defines a compatible `close` method.
+</Note>
+
+## Defining subprotocols
+
+Protocols can be extended and merged using multiple inheritance:
+
+```python
+from typing import Protocol
+
+class SupportsRead(Protocol):
+    def read(self, amount: int) -> bytes: ...
+
+class SupportsClose(Protocol):
+    def close(self) -> None: ...
+
+class TaggedReadableResource(SupportsClose, SupportsRead, Protocol):
+    label: str
+
+class AdvancedResource:
+    def __init__(self, label: str) -> None:
+        self.label = label
+    
+    def read(self, amount: int) -> bytes:
+        ...
+    
+    def close(self) -> None:
+        ...
+
+resource: TaggedReadableResource = AdvancedResource('handle with care')  # OK
+```
+
+<Warning>
+Inheriting from an existing protocol doesn't automatically make the subclass a protocol. You must explicitly include `Protocol` as a base class.
+</Warning>
+
+## Explicit protocol implementation
+
+You can explicitly subclass a protocol to:
+- Document that your class implements the protocol
+- Force mypy to verify compatibility
+- Inherit default implementations
+
+```python
+from typing import Protocol
+
+class SomeProto(Protocol):
+    attr: int
+    def method(self) -> str: ...
+
+class ExplicitSubclass(SomeProto):
+    pass
+
+ExplicitSubclass()  # Error: Cannot instantiate abstract class
+                    # with abstract attributes 'attr' and 'method'
+```
+
+## Callback protocols
+
+Protocols can define flexible callback types using a special `__call__` member:
+
+```python
+from collections.abc import Iterable
+from typing import Protocol
+
+class Combiner(Protocol):
+    def __call__(self, *vals: bytes, maxlen: int | None = None) -> list[bytes]: ...
+
+def batch_proc(data: Iterable[bytes], cb_results: Combiner) -> bytes:
+    for item in data:
+        ...
+
+def good_cb(*vals: bytes, maxlen: int | None = None) -> list[bytes]:
+    ...
+
+def bad_cb(*vals: bytes, maxitems: int | None) -> list[bytes]:
+    ...
+
+batch_proc([], good_cb)  # OK
+batch_proc([], bad_cb)   # Error: incompatible callback
+```
+
+## Runtime checking with isinstance
+
+You can use `isinstance()` with protocols if you decorate them with `@runtime_checkable`:
+
+```python
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class Portable(Protocol):
+    handles: int
+
+class Mug:
+    def __init__(self) -> None:
+        self.handles = 1
+
+mug = Mug()
+if isinstance(mug, Portable):  # Works at runtime!
+    use(mug.handles)
+```
+
+<Warning>
+`isinstance()` with protocols is not completely safe at runtime. Signatures of methods are not checked — only that all protocol members exist.
+</Warning>
+
+## Invariance of protocol attributes
+
+Protocol attributes are invariant. This example shows why:
+
+<CodeGroup>
+```python Problem
+class Box(Protocol):
+    content: object  # Mutable attribute
+
+class IntBox:
+    content: int
+
+def takes_box(box: Box) -> None:
+    box.content = "asdf"  # Would break IntBox!
+
+takes_box(IntBox())  # Error: Argument 1 has incompatible type
+```
+
+```python Solution
+class Box(Protocol):
+    @property
+    def content(self) -> object: ...  # Read-only
+
+class IntBox:
+    content: int
+
+def takes_box(box: Box) -> None: ...
+
+takes_box(IntBox())  # OK
+```
+</CodeGroup>
+
+## Recursive protocols
+
+Protocols can be recursive (self-referential):
+
+```python
+from typing import Protocol
+
+class TreeLike(Protocol):
+    value: int
+    
+    @property
+    def left(self) -> TreeLike | None: ...
+    
+    @property
+    def right(self) -> TreeLike | None: ...
+
+class SimpleTree:
+    def __init__(self, value: int) -> None:
+        self.value = value
+        self.left: SimpleTree | None = None
+        self.right: SimpleTree | None = None
+
+root: TreeLike = SimpleTree(0)  # OK
+```
+
+## Predefined protocol reference
+
+### Iteration protocols
+
+<AccordionGroup>
+  <Accordion title="collections.abc.Iterable[T]">
+    ```python
+    def __iter__(self) -> Iterator[T]
+    ```
+  </Accordion>
+  
+  <Accordion title="collections.abc.Iterator[T]">
+    ```python
+    def __next__(self) -> T
+    def __iter__(self) -> Iterator[T]
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Collection protocols
+
+<AccordionGroup>
+  <Accordion title="collections.abc.Sized">
+    ```python
+    def __len__(self) -> int
+    ```
+  </Accordion>
+  
+  <Accordion title="collections.abc.Container[T]">
+    ```python
+    def __contains__(self, x: object) -> bool
+    ```
+  </Accordion>
+  
+  <Accordion title="collections.abc.Collection[T]">
+    ```python
+    def __len__(self) -> int
+    def __iter__(self) -> Iterator[T]
+    def __contains__(self, x: object) -> bool
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Context manager protocols
+
+<AccordionGroup>
+  <Accordion title="contextlib.AbstractContextManager[T]">
+    ```python
+    def __enter__(self) -> T
+    def __exit__(self,
+                 exc_type: type[BaseException] | None,
+                 exc_value: BaseException | None,
+                 traceback: TracebackType | None) -> bool | None
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,469 @@
+---
+title: Plugin system documentation
+description: Complete reference for mypy's plugin hooks and APIs
+---
+
+## How the plugin system works
+
+The plugin system operates in several phases:
+
+<Steps>
+
+### Collection
+
+Plugins are collected from the mypy config file and imported using `importlib`.
+
+### Entry point
+
+Each module must provide an entry point function (default name: `plugin`) that accepts a mypy version string and returns a `Plugin` subclass.
+
+### Constructor
+
+All plugin constructors must accept an `Options` object and call `super().__init__()`.
+
+### Hook calls
+
+During semantic analysis and type checking, mypy calls `get_xxx` methods with fully qualified names.
+
+### First match
+
+Plugins are called in config order. The first plugin returning non-`None` is used.
+
+### Callback execution
+
+The callback receives context with current state and API access.
+
+</Steps>
+
+## Semantic analyzer notes
+
+The semantic analyzer processes code in a specific order:
+
+<Info>
+**Processing order:**
+1. Module top levels (including class bodies)
+2. Functions and methods (after top levels complete)
+3. Import cycles are handled by processing all top levels before any functions
+</Info>
+
+### Key differences from old analyzer
+
+- **Multiple passes**: Each target can be processed multiple times if forward references aren't ready
+- **Deferred processing**: `anal_type()` returns `None` if types aren't available yet
+- **Explicit deferral**: Use `defer()` to request reprocessing
+- **Final iteration**: Check `final_iteration` property - never defer during final iteration
+- **Placeholders**: Handle `PlaceholderNode` objects for unprocessed definitions
+
+<Warning>
+Plugin hooks must be idempotent since they can be called multiple times for the same name.
+</Warning>
+
+## Plugin hook reference
+
+### get_type_analyze_hook
+
+Customize type analyzer behavior for specific types.
+
+**Use case:** Support types that aren't expressible in standard Python typing.
+
+```python
+from mypy.plugin import Plugin, AnalyzeTypeContext
+from mypy.types import Type, Instance
+
+class CustomPlugin(Plugin):
+    def get_type_analyze_hook(self, fullname: str):
+        if fullname == "mylib.Vector":
+            return analyze_vector_type
+        return None
+
+def analyze_vector_type(ctx: AnalyzeTypeContext) -> Type:
+    # Vector can have arbitrary number of type arguments
+    # Vector[int, int] and Vector[int, int, int] are both valid
+    if not ctx.type.args:
+        return ctx.api.named_type('builtins.object', [])
+    # Return appropriate Instance type
+    return ctx.api.named_type('mylib.Vector', [])
+```
+
+**Example usage:**
+```python
+from lib import Vector
+
+a: Vector[int, int]
+b: Vector[int, int, int]
+```
+
+### get_function_hook
+
+Adjust the return type of a function call.
+
+**Use case:** Infer complex return types that depend on argument values.
+
+```python
+def get_function_hook(self, fullname: str):
+    if fullname == "mylib.make_thing":
+        return infer_make_thing_return_type
+    return None
+
+def infer_make_thing_return_type(ctx: FunctionContext) -> Type:
+    # Access argument types and values
+    if ctx.arg_types and ctx.arg_types[0]:
+        arg_type = ctx.arg_types[0][0]
+        # Return a more precise type based on arguments
+        return ctx.api.named_generic_type('mylib.Thing', [arg_type])
+    return ctx.default_return_type
+```
+
+<Note>
+This hook is also called for class instantiation (`Class()` calls).
+</Note>
+
+### get_function_signature_hook
+
+Adjust the signature of a function before type checking.
+
+**Use case:** Customize parameter types based on context.
+
+```python
+def get_function_signature_hook(self, fullname: str):
+    if fullname == "mylib.flexible_func":
+        return adjust_flexible_func_signature
+    return None
+
+def adjust_flexible_func_signature(ctx: FunctionSigContext) -> FunctionLike:
+    # Modify the signature based on context
+    return ctx.default_signature
+```
+
+### get_method_hook
+
+Adjust return type of a method call.
+
+**Use case:** Similar to `get_function_hook` but for methods.
+
+```python
+def get_method_hook(self, fullname: str):
+    if fullname == "mylib.Container.get":
+        return container_get_callback
+    return None
+
+def container_get_callback(ctx: MethodContext) -> Type:
+    # Access the type of 'self'
+    self_type = ctx.type
+    # Infer better return type
+    return ctx.default_return_type
+```
+
+<Info>
+Method hooks use the class where the method is **defined**, not where it's called.
+</Info>
+
+### get_method_signature_hook
+
+Adjust method signatures, including special methods.
+
+**Example from ctypes plugin:**
+
+```python
+def get_method_signature_hook(self, fullname: str):
+    if fullname == "ctypes.Array.__setitem__":
+        return array_setitem_callback
+    return None
+```
+
+**Usage:**
+```python
+from ctypes import Array, c_int
+
+x: Array[c_int]
+x[0] = 42  # Plugin customizes __setitem__ behavior
+```
+
+### get_attribute_hook
+
+Override attribute access type inference.
+
+**Use case:** Custom attribute type logic for properties and fields.
+
+```python
+def get_attribute_hook(self, fullname: str):
+    if fullname == "mylib.Dynamic.special_attr":
+        return dynamic_attr_callback
+    return None
+
+def dynamic_attr_callback(ctx: AttributeContext) -> Type:
+    # ctx.type is the object type
+    # ctx.is_lvalue indicates if this is an assignment target
+    if ctx.is_lvalue:
+        return ctx.api.named_type('builtins.str', [])
+    return ctx.default_attr_type
+```
+
+<Warning>
+Only called for:
+- Existing fields/properties on classes without `__getattr__`/`__getattribute__`
+- All fields (including nonexistent) on classes with `__getattr__`/`__getattribute__`
+- Does **not** include method calls
+</Warning>
+
+### get_class_attribute_hook
+
+Similar to `get_attribute_hook` but for class attributes.
+
+```python
+def get_class_attribute_hook(self, fullname: str):
+    if fullname == "mylib.MyClass.special":
+        return class_attr_callback
+    return None
+```
+
+### get_class_decorator_hook
+
+Modify class definition for decorators.
+
+**Example from dataclasses plugin:**
+
+```python
+def get_class_decorator_hook(self, fullname: str):
+    if fullname == "dataclasses.dataclass":
+        return dataclass_class_callback
+    return None
+
+def dataclass_class_callback(ctx: ClassDefContext) -> None:
+    # Add __init__ method to the class
+    # Modify ctx.cls.info in place
+    pass
+```
+
+**Usage:**
+```python
+from dataclasses import dataclass
+
+@dataclass  # Plugin adds __init__ here
+class User:
+    name: str
+
+user = User(name='example')  # Mypy understands this
+```
+
+<Note>
+This hook runs during semantic analysis and may encounter placeholders. Use `get_class_decorator_hook_2` for a later pass without placeholders.
+</Note>
+
+### get_class_decorator_hook_2
+
+Later-pass decorator hook without placeholders.
+
+**Difference from hook 1:**
+- Runs after placeholders are resolved
+- Can return `False` to request another pass
+- Must still be idempotent
+
+```python
+def get_class_decorator_hook_2(self, fullname: str):
+    if fullname == "mylib.special_class":
+        return special_class_callback
+    return None
+
+def special_class_callback(ctx: ClassDefContext) -> bool:
+    # Check if base classes are ready
+    for base in ctx.cls.info.bases:
+        if not is_processed(base):
+            return False  # Request another pass
+    # Process the class
+    return True
+```
+
+### get_metaclass_hook
+
+Update class definition for metaclasses.
+
+```python
+def get_metaclass_hook(self, fullname: str):
+    if fullname == "mylib.CustomMeta":
+        return metaclass_callback
+    return None
+```
+
+<Info>
+Only called for **explicit** metaclasses, not inherited ones.
+</Info>
+
+### get_base_class_hook
+
+Update class definition for base classes.
+
+```python
+def get_base_class_hook(self, fullname: str):
+    if fullname == "mylib.SpecialBase":
+        return base_class_callback
+    return None
+```
+
+### get_dynamic_class_hook
+
+Handle dynamic class definitions.
+
+**Use case:** Classes created by function calls.
+
+```python
+def get_dynamic_class_hook(self, fullname: str):
+    if fullname == "mylib.dynamic_class":
+        return dynamic_class_callback
+    return None
+
+def dynamic_class_callback(ctx: DynamicClassDefContext) -> None:
+    # Create TypeInfo and add to symbol table
+    # ctx.call is the RHS CallExpr
+    # ctx.name is the class name being assigned
+    class_name = ctx.name
+    # Create and register the class
+    ctx.api.add_symbol_table_node(class_name, ...)
+```
+
+**Usage:**
+```python
+from lib import dynamic_class
+
+X = dynamic_class('X', [])  # Plugin handles this
+```
+
+### get_customize_class_mro_hook
+
+Modify class MRO before body analysis.
+
+```python
+def get_customize_class_mro_hook(self, fullname: str):
+    if fullname == "mylib.CustomMRO":
+        return customize_mro_callback
+    return None
+```
+
+### get_additional_deps
+
+Add module dependencies dynamically.
+
+**Use case:** Libraries with configuration-based imports.
+
+```python
+def get_additional_deps(self, file: MypyFile) -> list[tuple[int, str, int]]:
+    if file.fullname == "mylib.dynamic":
+        # Return (priority, module_name, line_number)
+        return [(10, "mylib.extra", -1)]
+    return []
+```
+
+<Tip>
+Use priority 10 for most cases. Line number can be -1 if unknown.
+</Tip>
+
+### report_config_data
+
+Report configuration for cache invalidation.
+
+**Use case:** Per-module configuration affecting type checking.
+
+```python
+def report_config_data(self, ctx: ReportConfigContext) -> Any:
+    # Return JSON-encodable data
+    if ctx.id == "mylib":
+        return {
+            'strict_mode': True,
+            'version': '1.0'
+        }
+    return None
+```
+
+<Info>
+Mypy invalidates cache when returned data changes between runs.
+</Info>
+
+## Plugin API interfaces
+
+### CommonPluginApi
+
+Available to all hooks:
+
+```python
+class CommonPluginApi:
+    options: Options  # Global mypy options
+    
+    def lookup_fully_qualified(self, fullname: str) -> SymbolTableNode | None:
+        """Lookup symbol by full name."""
+```
+
+### SemanticAnalyzerPluginInterface
+
+Available during semantic analysis:
+
+```python
+class SemanticAnalyzerPluginInterface:
+    options: Options  # Per-file options
+    modules: dict[str, MypyFile]
+    cur_mod_id: str
+    
+    def named_type(self, fullname: str, args: list[Type] | None = None) -> Instance: ...
+    def fail(self, msg: str, ctx: Context, *, code: ErrorCode | None = None) -> None: ...
+    def defer(self) -> None: ...
+    def add_symbol_table_node(self, name: str, symbol: SymbolTableNode) -> Any: ...
+    
+    @property
+    def final_iteration(self) -> bool: ...
+```
+
+### CheckerPluginInterface
+
+Available during type checking:
+
+```python
+class CheckerPluginInterface:
+    msg: MessageBuilder
+    options: Options
+    
+    def fail(self, msg: str, ctx: Context, *, code: ErrorCode | None = None) -> None: ...
+    def named_generic_type(self, name: str, args: list[Type]) -> Instance: ...
+    def get_expression_type(self, node: Expression) -> Type: ...
+```
+
+## Testing plugins
+
+The `proper_plugin` helps find missing `get_proper_type()` calls:
+
+```ini
+[mypy]
+plugins = mypy.plugins.proper_plugin
+```
+
+<Tip>
+Enable `proper_plugin` in your CI to catch common plugin mistakes.
+</Tip>
+
+## Real-world plugin example
+
+Here's a simplified version from the default plugin:
+
+```python Default plugin structure
+from mypy.plugin import Plugin, MethodContext
+from mypy.types import Type
+
+class DefaultPlugin(Plugin):
+    def get_method_hook(self, fullname: str):
+        if fullname == "builtins.int.__pow__":
+            return int_pow_callback
+        return None
+
+def int_pow_callback(ctx: MethodContext) -> Type:
+    # Infer int for non-negative exponents, float for negative
+    if len(ctx.arg_types) == 2 and len(ctx.arg_types[0]) == 1:
+        arg = ctx.args[0][0]
+        if isinstance(arg, IntExpr):
+            exponent = arg.value
+            if exponent >= 0:
+                return ctx.api.named_generic_type("builtins.int", [])
+            else:
+                return ctx.api.named_generic_type("builtins.float", [])
+    return ctx.default_return_type
+
+def plugin(version: str):
+    return DefaultPlugin
+```

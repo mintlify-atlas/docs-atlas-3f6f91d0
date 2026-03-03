@@ -1,0 +1,420 @@
+---
+title: Common issues and solutions
+description: Solutions to common problems when using mypy for static type checking
+---
+
+This guide covers common issues you may encounter when using mypy and how to resolve them.
+
+## No errors reported for obviously wrong code
+
+There are several reasons why mypy might not flag obviously incorrect code:
+
+### Unannotated functions
+
+Functions without type annotations are not type-checked:
+
+```python
+def foo(a):
+    return '(' + a.split() + ')'  # No error!
+```
+
+This gives no error even though `a.split()` returns a list, not a string. The error is reported once you add annotations:
+
+```python
+def foo(a: str) -> str:
+    return '(' + a.split() + ')'
+# error: Unsupported operand types for + ("str" and "list[str]")
+```
+
+<Tip>
+  Use `--check-untyped-defs` to check function bodies even without annotations.
+</Tip>
+
+### Type Any propagation
+
+If a value has type `Any`, operations on it also return `Any`:
+
+```python
+def foo(a) -> str:  # 'a' has type Any
+    return '(' + a.split() + ')'  # No error! a.split() is Any
+```
+
+The type of `a` is unknown, so `a.split()` has type `Any`, and adding a string to `Any` is allowed.
+
+<Warning>
+  `Any` types can propagate through your program, reducing type safety.
+</Warning>
+
+### Unannotated `__init__`
+
+`__init__` without annotations can cause `Any` to leak into instance variables:
+
+```python
+class Bad:
+    def __init__(self):
+        self.value = "asdf"
+        1 + "asdf"  # No error!
+
+bad = Bad()
+bad.value + 1  # No error!
+reveal_type(bad.value)  # Revealed type is "Any"
+```
+
+Fix by explicitly annotating `__init__`:
+
+```python
+class Good:
+    def __init__(self) -> None:
+        self.value = "asdf"
+        1 + "asdf"  # error: Unsupported operand types
+```
+
+### Ignored imports
+
+The `--ignore-missing-imports` flag silently replaces missing modules with `Any`:
+
+```python
+import some_missing_module  # Silently becomes Any
+
+result = some_missing_module.func()  # result is Any, no errors!
+```
+
+Use `--no-silence-site-packages` to see these errors.
+
+## Name or attribute errors
+
+### Name not defined
+
+```python
+x = 1
+print(y)  # error: Name "y" is not defined
+```
+
+This usually indicates a typo or logic error.
+
+### Attribute not found
+
+```python
+class MyClass:
+    pass
+
+obj = MyClass()
+obj.value = 1  # error: "MyClass" has no attribute "value"
+```
+
+Declare attributes in `__init__` or as class variables:
+
+```python
+class MyClass:
+    value: int  # Class variable
+
+    def __init__(self) -> None:
+        self.value = 1  # Instance variable
+```
+
+## Type incompatibility
+
+### Assignment type mismatch
+
+```python
+x: int = "hello"  # error: Incompatible types in assignment
+```
+
+The variable was declared as `int` but assigned a `str`.
+
+### Argument type mismatch
+
+```python
+def greet(name: str) -> None:
+    print(f"Hello, {name}")
+
+greet(123)  # error: Argument 1 has incompatible type "int"; expected "str"
+```
+
+### Return type mismatch
+
+```python
+def get_number() -> int:
+    return "42"  # error: Incompatible return value type
+```
+
+## Dealing with `None`
+
+### Optional values
+
+Values that can be `None` must be typed as `Optional`:
+
+```python
+def find_user(user_id: int) -> Optional[User]:
+    # May return None if not found
+    return database.get(user_id)
+
+user = find_user(123)
+user.name  # error: Item "None" has no attribute "name"
+```
+
+Check for `None` before using:
+
+```python
+user = find_user(123)
+if user is not None:
+    print(user.name)  # OK
+```
+
+Or use the walrus operator:
+
+```python
+if (user := find_user(123)) is not None:
+    print(user.name)  # OK
+```
+
+### Unexpected `None`
+
+If mypy thinks a value might be `None` when you know it isn't:
+
+```python
+from typing import cast
+
+user = cast(User, find_user(123))  # Tell mypy it's not None
+```
+
+Or use `assert`:
+
+```python
+user = find_user(123)
+assert user is not None
+print(user.name)  # OK
+```
+
+## Generic types
+
+### Missing type parameters
+
+Generic types need type parameters:
+
+```python
+from typing import List
+
+def process(items: List) -> None:  # error: Missing type parameters
+    pass
+
+# Fix:
+def process(items: List[str]) -> None:
+    pass
+```
+
+### Wrong type parameters
+
+```python
+def sum_numbers(nums: List[str]) -> int:
+    return sum(nums)  # error: Argument 1 to "sum" has incompatible type
+
+# Fix:
+def sum_numbers(nums: List[int]) -> int:
+    return sum(nums)
+```
+
+## Variance issues
+
+### List invariance
+
+```python
+def print_animals(animals: List[Animal]) -> None:
+    for animal in animals:
+        print(animal.name)
+
+dogs: List[Dog] = [Dog("Rex")]
+print_animals(dogs)  # error: Argument has incompatible type
+```
+
+Lists are invariant. Use `Sequence` for read-only operations:
+
+```python
+from typing import Sequence
+
+def print_animals(animals: Sequence[Animal]) -> None:
+    for animal in animals:
+        print(animal.name)
+
+print_animals(dogs)  # OK
+```
+
+## Import cycles
+
+Import cycles can cause issues with type checking:
+
+```python
+# a.py
+from b import B
+
+class A:
+    def use_b(self, b: B) -> None:
+        pass
+
+# b.py
+from a import A
+
+class B:
+    def use_a(self, a: A) -> None:
+        pass
+```
+
+Use `TYPE_CHECKING` and string literals:
+
+```python
+# a.py
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from b import B
+
+class A:
+    def use_b(self, b: "B") -> None:
+        pass
+```
+
+## Stub file issues
+
+### Conflicting stub
+
+If you have a custom stub that conflicts with an installed one:
+
+```bash
+# Remove from MYPYPATH or rename the stub
+export MYPYPATH=/path/without/conflicting/stub
+```
+
+### Outdated stubs
+
+Stub packages may be outdated:
+
+```bash
+# Update stub packages
+pip install --upgrade types-requests types-redis
+```
+
+## Performance issues
+
+### Slow type checking
+
+For large codebases:
+
+<Accordion title="Use daemon mode">
+  ```bash
+  dmypy start
+  dmypy run -- myproject
+  ```
+</Accordion>
+
+<Accordion title="Enable incremental mode">
+  ```ini
+  [mypy]
+  incremental = True
+  cache_dir = .mypy_cache
+  ```
+</Accordion>
+
+<Accordion title="Skip checking stubs">
+  ```bash
+  mypy --skip-version-check --skip-cache-mtime-checks myproject
+  ```
+</Accordion>
+
+## Platform-specific issues
+
+### Different types on different platforms
+
+Some types differ between platforms:
+
+```python
+import sys
+
+if sys.platform == "win32":
+    from typing import WindowsPath as PathType
+else:
+    from typing import PosixPath as PathType
+```
+
+Or use `Union`:
+
+```python
+from pathlib import Path
+
+def process_path(p: Path) -> None:  # Works on all platforms
+    pass
+```
+
+## Debugging type issues
+
+### Use `reveal_type()`
+
+Debug what mypy thinks a type is:
+
+```python
+reveal_type(x)  # Revealed type is "builtins.int"
+```
+
+### Use `reveal_locals()`
+
+See all local variable types:
+
+```python
+def foo() -> None:
+    x = 1
+    y = "hello"
+    reveal_locals()
+    # Revealed local types are:
+    # x: builtins.int
+    # y: builtins.str
+```
+
+### Enable verbose output
+
+```bash
+mypy --verbose myproject
+```
+
+### Show error context
+
+```bash
+mypy --show-error-context myproject
+```
+
+## Common workarounds
+
+<CardGroup cols={2}>
+  <Card title="# type: ignore" icon="ban">
+    Suppress specific errors:
+    ```python
+    x = func()  # type: ignore[attr-defined]
+    ```
+  </Card>
+
+  <Card title="cast()" icon="wand-magic-sparkles">
+    Tell mypy the correct type:
+    ```python
+    from typing import cast
+    x = cast(str, func())
+    ```
+  </Card>
+
+  <Card title="assert" icon="check">
+    Narrow types:
+    ```python
+    assert x is not None
+    print(x.value)
+    ```
+  </Card>
+
+  <Card title="# pragma: no cover" icon="shield">
+    For unreachable code:
+    ```python
+    if TYPE_CHECKING:  # pragma: no cover
+        from module import Class
+    ```
+  </Card>
+</CardGroup>
+
+<Note>
+  While workarounds are sometimes necessary, prefer fixing the underlying issue when possible.
+</Note>

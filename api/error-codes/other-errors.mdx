@@ -1,0 +1,609 @@
+---
+title: Other error codes
+description: Error codes for imports, definitions, and miscellaneous checks
+---
+
+These error codes cover imports, name definitions, and various other checks that don't fit into type or syntax error categories.
+
+## Import errors
+
+### import
+
+Parent error code for all import-related issues.
+
+```python
+IMPORT = ErrorCode(
+    "import",
+    "Require that imported module can be found or has stubs",
+    "General"
+)
+```
+
+This is a parent code for `import-not-found` and `import-untyped`.
+
+### import-not-found
+
+Check that import targets can be found.
+
+```python
+IMPORT_NOT_FOUND = ErrorCode(
+    "import-not-found",
+    "Require that imported module can be found",
+    "General",
+    sub_code_of=IMPORT,
+)
+```
+
+**Example:**
+
+```python
+# Error: Cannot find implementation or library stub for module named "nonexistent"  [import-not-found]
+import nonexistent
+
+# Error: Cannot find implementation or library stub for module named "mytypo"  [import-not-found]
+from mytypo import something
+```
+
+**Common causes:**
+- Typo in module name
+- Missing package installation
+- Incorrect PYTHONPATH or module search path
+- Module exists but is not in a location Mypy can find
+
+**Solutions:**
+
+```bash
+# Install the package
+pip install package-name
+
+# Add to PYTHONPATH
+export PYTHONPATH=/path/to/modules:$PYTHONPATH
+
+# Use mypy_path in config
+# mypy.ini:
+[mypy]
+mypy_path = ./src:./lib
+```
+
+### import-untyped
+
+Check that imported modules have type information.
+
+```python
+IMPORT_UNTYPED = ErrorCode(
+    "import-untyped",
+    "Require that imported module has stubs",
+    "General",
+    sub_code_of=IMPORT,
+)
+```
+
+**Example:**
+
+```python
+# Error: Library stubs not installed for "requests"  [import-untyped]
+import requests
+
+# Error: Skipping analyzing "mylib": module is installed, but missing library stubs or py.typed marker  [import-untyped]
+from mylib import helpers
+```
+
+**Solutions:**
+
+```bash
+# Install type stubs
+pip install types-requests
+
+# Ignore missing imports (mypy.ini)
+[mypy-requests.*]
+ignore_missing_imports = True
+
+# Or use command line
+mypy --ignore-missing-imports myfile.py
+```
+
+## Definition errors
+
+### name-defined
+
+Check that names are defined before use.
+
+```python
+NAME_DEFINED = ErrorCode(
+    "name-defined",
+    "Check that name is defined",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+print(undefined_var)  # Error: Name "undefined_var" is not defined  [name-defined]
+
+# Error: Name "sortt" is not defined; did you mean "sorted"?  [name-defined]
+result = sortt([3, 1, 2])
+```
+
+### used-before-def
+
+Check that variables are not used before definition.
+
+```python
+USED_BEFORE_DEF = ErrorCode(
+    "used-before-def",
+    "Warn about variables that are used before they are defined",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+print(x)  # Error: Name "x" is used before definition  [used-before-def]
+x = 10
+
+def func():
+    print(y)  # Error: Name "y" is used before definition  [used-before-def]
+    y = 5
+```
+
+### no-redef
+
+Check that each name is defined only once.
+
+```python
+NO_REDEF = ErrorCode(
+    "no-redef",
+    "Check that each name is defined once",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+class MyClass:
+    pass
+
+# Error: Name "MyClass" already defined on line 1  [no-redef]
+class MyClass:
+    pass
+
+def foo(x: int) -> int:
+    return x
+
+# Error: Name "foo" already defined on line 7  [no-redef]
+def foo(x: str) -> str:
+    return x
+```
+
+<Note>
+  If you silence this error, references to the name will use the **first** definition.
+</Note>
+
+## Validation errors
+
+### valid-newtype
+
+Check that NewType target is valid.
+
+```python
+VALID_NEWTYPE = ErrorCode(
+    "valid-newtype",
+    "Check that argument 2 to NewType is valid",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import NewType, Any
+
+UserId = NewType('UserId', int)  # OK
+
+# Error: Argument 2 to NewType(...) must be subclassable (got "int | str")  [valid-newtype]
+MixedId = NewType('MixedId', int | str)
+
+# Error: Argument 2 to NewType(...) must be subclassable (got "Any")  [valid-newtype]
+AnyId = NewType('AnyId', Any)
+```
+
+### name-match
+
+Check that definitions have consistent naming.
+
+```python
+NAME_MATCH = ErrorCode(
+    "name-match",
+    "Check that type definition has consistent naming",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import NamedTuple
+
+# Error: First argument to namedtuple() should be "Point", not "Coordinate"  [name-match]
+Point = NamedTuple("Coordinate", [("x", int), ("y", int)])
+
+# Correct:
+Point = NamedTuple("Point", [("x", int), ("y", int)])
+```
+
+### literal-required
+
+Check that a literal value is used where required.
+
+```python
+LITERAL_REQ = ErrorCode(
+    "literal-required",
+    "Check that value is a literal",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import TypedDict
+
+class Person(TypedDict):
+    name: str
+    age: int
+
+def get_field(p: Person, key: str) -> int | str:
+    # Error: TypedDict key must be a string literal; expected one of ("name", "age")  [literal-required]
+    return p[key]
+
+# Correct - use Literal:
+from typing import Literal
+
+def get_field(p: Person, key: Literal["name", "age"]) -> int | str:
+    return p[key]
+```
+
+## Function errors
+
+### no-overload-impl
+
+Check that overloaded functions have implementations.
+
+```python
+NO_OVERLOAD_IMPL = ErrorCode(
+    "no-overload-impl",
+    "Check that overloaded functions outside stub files have an implementation",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import overload
+
+@overload
+def process(x: int) -> str: ...
+
+@overload
+def process(x: str) -> int: ...
+
+# Error: Overloaded function implementation missing  [no-overload-impl]
+
+# Correct:
+@overload
+def process(x: int) -> str: ...
+
+@overload
+def process(x: str) -> int: ...
+
+def process(x: int | str) -> int | str:
+    if isinstance(x, int):
+        return str(x)
+    return int(x)
+```
+
+### exit-return
+
+Check that `__exit__` has appropriate return type.
+
+```python
+EXIT_RETURN = ErrorCode(
+    "exit-return",
+    "Warn about too general return type for '__exit__'",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+class MyContext:
+    def __enter__(self):
+        return self
+    
+    # Error: "bool" is invalid as return type for "__exit__" that always returns False  [exit-return]
+    def __exit__(self, exc, value, tb) -> bool:
+        print('exiting')
+        return False
+
+# Correct:
+from typing import Literal
+
+class MyContext:
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc, value, tb) -> Literal[False]:
+        print('exiting')
+        return False
+    
+    # Or:
+    def __exit__(self, exc, value, tb) -> None:
+        print('exiting')
+```
+
+## Async errors
+
+### unused-coroutine
+
+Ensure that coroutine return values are used.
+
+```python
+UNUSED_COROUTINE = ErrorCode(
+    "unused-coroutine",
+    "Ensure that all coroutines are used",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+async def fetch_data() -> str:
+    return "data"
+
+async def process():
+    # Error: Missing await  [unused-coroutine]
+    fetch_data()
+    
+    # Correct:
+    await fetch_data()
+    
+    # Also OK - explicitly ignore:
+    _ = fetch_data()
+```
+
+## Special checks
+
+### empty-body
+
+Check that functions don't have empty bodies (outside stubs).
+
+```python
+EMPTY_BODY = ErrorCode(
+    "empty-body",
+    "A dedicated error code to opt out return errors for empty/trivial bodies",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from abc import abstractmethod
+
+class Base:
+    @abstractmethod
+    def method(self) -> int:
+        pass  # OK - abstract method
+    
+    def regular_method(self) -> int:
+        pass  # Error: Missing return statement  [empty-body]
+```
+
+### safe-super
+
+Warn about unsafe calls to abstract methods via super().
+
+```python
+SAFE_SUPER = ErrorCode(
+    "safe-super",
+    "Warn about calls to abstract methods with empty/trivial bodies",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from abc import abstractmethod
+
+class Base:
+    @abstractmethod
+    def compute(self) -> int:
+        ...
+
+class Derived(Base):
+    def compute(self) -> int:
+        # Error: Call to abstract method "compute" of "Base" with trivial body via super() is unsafe  [safe-super]
+        return super().compute() + 1
+```
+
+### assert-type
+
+Check that assert_type calls succeed.
+
+```python
+ASSERT_TYPE = ErrorCode(
+    "assert-type",
+    "Check that assert_type() call succeeds",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing_extensions import assert_type
+
+x = [1, 2, 3]
+assert_type(x, list[int])  # OK
+
+y = "hello"
+# Error: Expression is of type "str", not "int"  [assert-type]
+assert_type(y, int)
+```
+
+## TypedDict specific
+
+### typeddict-readonly-mutated
+
+Check that ReadOnly TypedDict keys are not mutated.
+
+```python
+TYPEDDICT_READONLY_MUTATED = ErrorCode(
+    "typeddict-readonly-mutated",
+    "TypedDict's ReadOnly key is mutated",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import TypedDict
+from typing_extensions import ReadOnly
+
+class Config(TypedDict):
+    name: ReadOnly[str]
+    value: int
+
+config: Config = {"name": "test", "value": 42}
+config["value"] = 100  # OK
+
+# Error: ReadOnly TypedDict key "name" cannot be mutated  [typeddict-readonly-mutated]
+config["name"] = "new"
+```
+
+## Narrowing and type guards
+
+### narrowed-type-not-subtype
+
+Check that TypeIs narrows to a subtype.
+
+```python
+NARROWED_TYPE_NOT_SUBTYPE = ErrorCode(
+    "narrowed-type-not-subtype",
+    "Warn if a TypeIs function's narrowed type is not a subtype of the original type",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing_extensions import TypeIs
+
+# Error: Narrowed type "str" is not a subtype of input type "int"  [narrowed-type-not-subtype]
+def is_string(x: int) -> TypeIs[str]:
+    return isinstance(x, str)
+
+# Correct:
+def is_string(x: object) -> TypeIs[str]:
+    return isinstance(x, str)
+```
+
+## Miscellaneous
+
+### misc
+
+Catch-all for various other checks.
+
+```python
+MISC = ErrorCode(
+    "misc",
+    "Miscellaneous other checks",
+    "General"
+)
+```
+
+**Description:**
+
+The `misc` error code is used for various checks that don't have their own specific error codes. This includes:
+
+- Invalid metaclass usage
+- Inconsistent MRO (Method Resolution Order)
+- Invalid type variable usage in certain contexts
+- Various other type system violations
+
+**Example:**
+
+```python
+from typing import TypeVar
+
+T = TypeVar('T')
+
+# Various misc errors can occur in complex type scenarios
+class Base:
+    x: T  # Error: Type variable used in class body  [misc]
+```
+
+<Note>
+  Future Mypy versions will likely add more specific error codes for some checks currently using `misc`.
+</Note>
+
+### Sub-codes of misc
+
+#### overload-cannot-match
+
+```python
+OVERLOAD_CANNOT_MATCH = ErrorCode(
+    "overload-cannot-match",
+    "Warn if an @overload signature can never be matched",
+    "General",
+    sub_code_of=MISC,
+)
+```
+
+#### overload-overlap
+
+```python
+OVERLOAD_OVERLAP = ErrorCode(
+    "overload-overlap",
+    "Warn if multiple @overload variants overlap in unsafe ways",
+    "General",
+    sub_code_of=MISC,
+)
+```
+
+#### prop-decorator
+
+```python
+PROPERTY_DECORATOR = ErrorCode(
+    "prop-decorator",
+    "Decorators on top of @property are not supported",
+    "General",
+    sub_code_of=MISC,
+)
+```
+
+**Example:**
+
+```python
+class MyClass:
+    @custom_decorator  # Error: Decorators on top of @property are not supported  [prop-decorator]
+    @property
+    def value(self) -> int:
+        return 42
+```
+
+## See also
+
+- [Error codes overview](/api/error-codes/overview) - Error code system
+- [Type errors](/api/error-codes/type-errors) - Type checking error codes
+- [Syntax errors](/api/error-codes/syntax-errors) - Syntax error codes
+- [Configuration](/configuration) - Configuring error codes

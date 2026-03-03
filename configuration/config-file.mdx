@@ -1,0 +1,491 @@
+---
+title: Configuration file
+description: Learn how to configure Mypy using configuration files including mypy.ini, pyproject.toml, and setup.cfg
+---
+
+Mypy supports reading configuration settings from a file. This is essential when introducing typing to an existing codebase or managing complex project configurations.
+
+## Configuration file discovery
+
+By default, Mypy discovers configuration files by walking up the file system. In each directory, it looks for these files (in order):
+
+1. `mypy.ini`
+2. `.mypy.ini`
+3. `pyproject.toml` (containing a `[tool.mypy]` section)
+4. `setup.cfg` (containing a `[mypy]` section)
+
+If no configuration file is found, Mypy looks in these locations:
+
+1. `$XDG_CONFIG_HOME/mypy/config`
+2. `~/.config/mypy/config`
+3. `~/.mypy.ini`
+
+<Note>
+The `--config-file` command-line flag has the highest precedence and must point to a valid configuration file.
+</Note>
+
+<Warning>
+There is no merging of configuration files. Mypy uses only the first configuration file it finds.
+</Warning>
+
+## Configuration file format
+
+Mypy configuration files use the INI file format with sections in square brackets and settings as `NAME = VALUE` pairs. Comments start with `#`.
+
+### Basic structure
+
+<CodeGroup>
+
+```ini mypy.ini
+# Global options
+[mypy]
+warn_return_any = True
+warn_unused_configs = True
+python_version = 3.10
+
+# Per-module options
+[mypy-mycode.foo.*]
+disallow_untyped_defs = True
+
+[mypy-mycode.bar]
+warn_return_any = False
+
+[mypy-somelibrary]
+ignore_missing_imports = True
+```
+
+```toml pyproject.toml
+[tool.mypy]
+warn_return_any = true
+warn_unused_configs = true
+python_version = "3.10"
+
+[[tool.mypy.overrides]]
+module = "mycode.foo.*"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "mycode.bar"
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = "somelibrary"
+ignore_missing_imports = true
+```
+
+```ini setup.cfg
+[mypy]
+warn_return_any = True
+warn_unused_configs = True
+python_version = 3.10
+
+[mypy-mycode.foo.*]
+disallow_untyped_defs = True
+
+[mypy-mycode.bar]
+warn_return_any = False
+```
+
+</CodeGroup>
+
+## Global section
+
+A section named `[mypy]` must be present and specifies global flags.
+
+<ParamField path="python_version" type="string" default="Current Python version">
+  Specifies the Python version used to parse and check the target program. Format: `MAJOR.MINOR` (e.g., `3.10`)
+  
+  ```ini
+  [mypy]
+  python_version = 3.10
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+<ParamField path="mypy_path" type="string">
+  Specifies paths to use for module discovery, after trying `MYPYPATH` environment variable. Multiple paths are separated with `:` or `,`. User home directory and environment variables will be expanded.
+  
+  ```ini
+  [mypy]
+  mypy_path = ./stubs:./typings
+  ```
+  
+  Relative paths are treated relative to the working directory. Use `MYPY_CONFIG_FILE_DIR` to refer to paths relative to the config file.
+  
+  This option may only be set in the global section.
+</ParamField>
+
+<ParamField path="files" type="comma-separated list of strings">
+  A comma-separated list of paths to check if none are given on the command line. Supports recursive file globbing using `glob`.
+  
+  ```ini
+  [mypy]
+  files = src/**/*.py, tests/**/*.py
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+<ParamField path="exclude" type="regular expression">
+  A regular expression matching file names, directory names, and paths to ignore while recursively discovering files.
+  
+  ```ini
+  [mypy]
+  exclude = (?x)(
+      ^one\.py$    # files named "one.py"
+      | two\.pyi$  # or files ending with "two.pyi"
+      | ^three\.   # or files starting with "three."
+    )
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+<ParamField path="strict" type="boolean" default="False">
+  Enable all optional error checking flags. The exact list of flags may change over time.
+  
+  ```ini
+  [mypy]
+  strict = True
+  ```
+</ParamField>
+
+## Per-module sections
+
+Additional sections named `[mypy-PATTERN1,PATTERN2,...]` specify flags that apply only to modules whose name matches at least one pattern.
+
+### Pattern syntax
+
+<Accordion title="Concrete module names">
+  A pattern like `foo.bar` matches only the named module.
+  
+  ```ini
+  [mypy-foo.bar]
+  ignore_missing_imports = True
+  ```
+</Accordion>
+
+<Accordion title="Structured wildcards">
+  A pattern like `foo.bar.*` matches `foo.bar` and any submodules (e.g., `foo.bar.baz`, `foo.bar.baz.quux`).
+  
+  ```ini
+  [mypy-foo.bar.*]
+  disallow_untyped_defs = True
+  ```
+</Accordion>
+
+<Accordion title="Unstructured wildcards">
+  Stars may appear in the middle of a name (e.g., `site.*.migrations.*`). Stars match zero or more module components.
+  
+  ```ini
+  [mypy-site.*.migrations.*]
+  ignore_errors = True
+  ```
+</Accordion>
+
+### Configuration precedence
+
+When options conflict, the precedence order is:
+
+1. Inline configuration in the source file
+2. Sections with concrete module names (`foo.bar`)
+3. Sections with unstructured wildcard patterns (`foo.*.baz`), with sections later in the file overriding earlier sections
+4. Sections with structured wildcard patterns (`foo.bar.*`), with more specific overriding more general
+5. Command line options
+6. Top-level configuration file options
+
+## Common configuration options
+
+### Type checking strictness
+
+<ParamField path="disallow_untyped_defs" type="boolean" default="False">
+  Disallow defining functions without type annotations or with incomplete type annotations.
+  
+  ```ini
+  [mypy]
+  disallow_untyped_defs = True
+  ```
+</ParamField>
+
+<ParamField path="disallow_any_generics" type="boolean" default="False">
+  Disallow usage of generic types that do not specify explicit type parameters.
+  
+  ```ini
+  [mypy]
+  disallow_any_generics = True
+  ```
+</ParamField>
+
+<ParamField path="disallow_untyped_calls" type="boolean" default="False">
+  Disallow calling functions without type annotations from functions with type annotations.
+  
+  ```ini
+  [mypy]
+  disallow_untyped_calls = True
+  ```
+</ParamField>
+
+<ParamField path="check_untyped_defs" type="boolean" default="False">
+  Type-check the interior of functions without type annotations.
+  
+  ```ini
+  [mypy]
+  check_untyped_defs = True
+  ```
+</ParamField>
+
+### Import handling
+
+<ParamField path="ignore_missing_imports" type="boolean" default="False">
+  Suppress error messages about imports that cannot be resolved.
+  
+  ```ini
+  [mypy-untyped_library]
+  ignore_missing_imports = True
+  ```
+  
+  <Info>
+  If used in a per-module section, the module name should match the name of the imported module, not the module containing the import statement.
+  </Info>
+</ParamField>
+
+<ParamField path="follow_imports" type="string" default="normal">
+  Directs what to do with imports when the imported module is found as a `.py` file. Possible values:
+  
+  - `normal`: Follow imports normally
+  - `silent`: Follow imports but suppress errors
+  - `skip`: Don't follow imports
+  - `error`: Treat imports as errors
+  
+  ```ini
+  [mypy-problematic_module.*]
+  follow_imports = skip
+  ```
+</ParamField>
+
+### Warnings
+
+<ParamField path="warn_return_any" type="boolean" default="False">
+  Show a warning when returning a value with type `Any` from a function declared with a non-`Any` return type.
+  
+  ```ini
+  [mypy]
+  warn_return_any = True
+  ```
+</ParamField>
+
+<ParamField path="warn_unused_ignores" type="boolean" default="False">
+  Warn about unneeded `# type: ignore` comments.
+  
+  ```ini
+  [mypy]
+  warn_unused_ignores = True
+  ```
+</ParamField>
+
+<ParamField path="warn_redundant_casts" type="boolean" default="False">
+  Warn about casting an expression to its inferred type.
+  
+  ```ini
+  [mypy]
+  warn_redundant_casts = True
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+<ParamField path="warn_unused_configs" type="boolean" default="False">
+  Warn about per-module sections in the config file that do not match any files processed.
+  
+  ```ini
+  [mypy]
+  warn_unused_configs = True
+  ```
+  
+  <Tip>
+  Use this to catch typos in section names.
+  </Tip>
+</ParamField>
+
+### Optional type handling
+
+<ParamField path="strict_optional" type="boolean" default="True">
+  Enable strict checking of optional types and `None` values. When disabled, `None` is treated as compatible with every type.
+  
+  ```ini
+  [mypy]
+  strict_optional = True
+  ```
+  
+  <Warning>
+  `strict_optional = False` is not recommended. Avoid using it unless you understand the implications.
+  </Warning>
+</ParamField>
+
+<ParamField path="implicit_optional" type="boolean" default="False">
+  Treat parameters with a `None` default value as having an implicit optional type.
+  
+  ```ini
+  [mypy]
+  implicit_optional = True
+  ```
+</ParamField>
+
+### Incremental mode
+
+<ParamField path="incremental" type="boolean" default="True">
+  Enable incremental mode for faster repeat checks.
+  
+  ```ini
+  [mypy]
+  incremental = True
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+<ParamField path="cache_dir" type="string" default=".mypy_cache">
+  Specifies the location where Mypy stores incremental cache info. User home directory and environment variables will be expanded.
+  
+  ```ini
+  [mypy]
+  cache_dir = .mypy_cache
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+## Using pyproject.toml
+
+When using `pyproject.toml`, some syntax differences apply:
+
+<Accordion title="Section naming">
+  The `[mypy]` section becomes `[tool.mypy]`:
+  
+  ```toml
+  [tool.mypy]
+  python_version = "3.10"
+  warn_return_any = true
+  ```
+</Accordion>
+
+<Accordion title="Per-module overrides">
+  Module-specific sections use `[[tool.mypy.overrides]]`:
+  
+  ```toml
+  [[tool.mypy.overrides]]
+  module = "packagename"
+  ignore_missing_imports = true
+  
+  [[tool.mypy.overrides]]
+  module = ["package1", "package2"]
+  disallow_untyped_defs = true
+  ```
+</Accordion>
+
+<Accordion title="TOML syntax requirements">
+  - Strings must be wrapped in double quotes or single quotes
+  - Boolean values should be lowercase (`true`, `false`)
+  - Lists use array syntax: `["item1", "item2"]`
+</Accordion>
+
+## Inverting option values
+
+Options that take boolean values may be inverted by:
+
+- Adding `no_` to their name (e.g., `no_strict_optional`)
+- Swapping prefix from `disallow` to `allow` (e.g., `allow_untyped_defs` instead of `disallow_untyped_defs`)
+
+```ini
+[mypy]
+# These are equivalent
+no_strict_optional = True
+strict_optional = False
+
+# These are equivalent
+allow_untyped_defs = True
+disallow_untyped_defs = False
+```
+
+## Path expansion
+
+Some options support user home directory and environment variable expansion:
+
+- Use `~` at the beginning of a path for the user home directory
+- Use `$VARNAME` or `${VARNAME}` for environment variables
+- Use `$MYPY_CONFIG_FILE_DIR` to refer to the directory containing the config file
+
+```ini
+[mypy]
+mypy_path = $MYPY_CONFIG_FILE_DIR/stubs:~/shared_stubs
+cache_dir = ~/.cache/mypy
+```
+
+## Advanced plugins
+
+<ParamField path="plugins" type="comma-separated list of strings">
+  A comma-separated list of Mypy plugins.
+  
+  ```ini
+  [mypy]
+  plugins = pydantic.mypy, sqlalchemy.ext.mypy.plugin
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+## Report generation
+
+<Warning>
+Generating reports disables incremental mode and can significantly slow down your workflow. Use reports only for specific runs (e.g., in CI).
+</Warning>
+
+<ParamField path="any_exprs_report" type="string">
+  Generate a text file report documenting expressions of type `Any`.
+  
+  ```ini
+  [mypy]
+  any_exprs_report = reports/any_exprs
+  ```
+</ParamField>
+
+<ParamField path="html_report" type="string">
+  Generate an HTML type checking coverage report. Requires `lxml` library.
+  
+  ```ini
+  [mypy]
+  html_report = reports/html
+  ```
+</ParamField>
+
+## Platform configuration
+
+<ParamField path="platform" type="string" default="Current platform">
+  Specifies the OS platform for the target program (e.g., `darwin`, `win32`, `linux`).
+  
+  ```ini
+  [mypy]
+  platform = linux
+  ```
+  
+  This option may only be set in the global section.
+</ParamField>
+
+<ParamField path="always_true" type="comma-separated list of strings">
+  Variables that Mypy will treat as compile-time constants that are always true.
+  
+  ```ini
+  [mypy]
+  always_true = DEBUG,MYPYC
+  ```
+</ParamField>
+
+<ParamField path="always_false" type="comma-separated list of strings">
+  Variables that Mypy will treat as compile-time constants that are always false.
+  
+  ```ini
+  [mypy]
+  always_false = TYPING_ONLY
+  ```
+</ParamField>

@@ -1,0 +1,662 @@
+---
+title: Command-line configuration
+description: Configure Mypy using command-line flags and options for type checking control
+---
+
+Mypy can be configured using command-line flags in addition to configuration files. Command-line flags have higher precedence than configuration file options (except for inline configuration).
+
+## Basic usage
+
+```bash
+mypy program.py
+mypy package/
+mypy -m mymodule
+mypy -p mypackage
+```
+
+## Specifying code to check
+
+<ParamField path="files" type="positional arguments">
+  Files, directories, modules, or packages to type check.
+  
+  ```bash
+  mypy file1.py file2.py
+  mypy src/
+  ```
+</ParamField>
+
+<ParamField path="-m MODULE" type="string">
+  Type check a module by name.
+  
+  ```bash
+  mypy -m myapp.main
+  ```
+</ParamField>
+
+<ParamField path="-p PACKAGE" type="string">
+  Type check a package and all its submodules.
+  
+  ```bash
+  mypy -p mypackage
+  ```
+</ParamField>
+
+<ParamField path="-c PROGRAM_TEXT" type="string">
+  Type check a program passed as a string.
+  
+  ```bash
+  mypy -c "print('Hello, typed world!')"
+  ```
+</ParamField>
+
+## Configuration file
+
+<ParamField path="--config-file CONFIG_FILE" type="string">
+  Specify a configuration file to use.
+  
+  ```bash
+  mypy --config-file mypy-strict.ini src/
+  ```
+  
+  <Info>
+  This flag has the highest precedence and must point to a valid configuration file.
+  </Info>
+</ParamField>
+
+<ParamField path="--warn-unused-configs" type="boolean">
+  Warn about unused `[mypy-<pattern>]` config file sections.
+  
+  ```bash
+  mypy --warn-unused-configs src/
+  ```
+</ParamField>
+
+## Python version and platform
+
+<ParamField path="--python-version VERSION" type="string" default="Current Python version">
+  Specify the Python version to target. Format: `MAJOR.MINOR`.
+  
+  ```bash
+  mypy --python-version 3.10 src/
+  ```
+  
+  <Tip>
+  Use this to check code compatibility with different Python versions.
+  </Tip>
+</ParamField>
+
+<ParamField path="--platform PLATFORM" type="string" default="Current platform">
+  Specify the platform to check against (e.g., `linux`, `darwin`, `win32`).
+  
+  ```bash
+  mypy --platform win32 src/
+  ```
+</ParamField>
+
+<ParamField path="--always-true NAME" type="string">
+  Variables to treat as compile-time constants that are always true.
+  
+  ```bash
+  mypy --always-true DEBUG src/
+  ```
+</ParamField>
+
+<ParamField path="--always-false NAME" type="string">
+  Variables to treat as compile-time constants that are always false.
+  
+  ```bash
+  mypy --always-false TYPING_ONLY src/
+  ```
+</ParamField>
+
+## Import discovery
+
+<ParamField path="--ignore-missing-imports" type="boolean">
+  Suppress error messages about imports that cannot be resolved.
+  
+  ```bash
+  mypy --ignore-missing-imports src/
+  ```
+  
+  <Warning>
+  This is a blunt instrument. Consider using per-module configuration instead.
+  </Warning>
+</ParamField>
+
+<ParamField path="--follow-imports {normal,silent,skip,error}" type="choice" default="normal">
+  How to handle imports:
+  - `normal`: Follow imports and type check them
+  - `silent`: Follow imports but suppress errors
+  - `skip`: Don't follow imports (treat as `Any`)
+  - `error`: Treat imports as errors
+  
+  ```bash
+  mypy --follow-imports skip src/
+  ```
+</ParamField>
+
+<ParamField path="--python-executable EXECUTABLE" type="string">
+  Python executable to use for finding PEP 561 packages.
+  
+  ```bash
+  mypy --python-executable /usr/bin/python3.11 src/
+  ```
+</ParamField>
+
+<ParamField path="--no-site-packages" type="boolean">
+  Do not search for installed PEP 561 packages.
+  
+  ```bash
+  mypy --no-site-packages src/
+  ```
+</ParamField>
+
+<ParamField path="--no-silence-site-packages" type="boolean">
+  Report errors in installed packages.
+  
+  ```bash
+  mypy --no-silence-site-packages src/
+  ```
+</ParamField>
+
+## Disallow dynamic typing
+
+<ParamField path="--disallow-any-unimported" type="boolean">
+  Disallow `Any` types from unfollowed imports.
+  
+  ```bash
+  mypy --disallow-any-unimported src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-any-expr" type="boolean">
+  Disallow all expressions that have type `Any`.
+  
+  ```bash
+  mypy --disallow-any-expr src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-any-decorated" type="boolean">
+  Disallow functions with `Any` in signature after decorator transformation.
+  
+  ```bash
+  mypy --disallow-any-decorated src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-any-explicit" type="boolean">
+  Disallow explicit `Any` in type positions.
+  
+  ```bash
+  mypy --disallow-any-explicit src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-any-generics" type="boolean">
+  Disallow generic types without explicit type parameters.
+  
+  ```bash
+  mypy --disallow-any-generics src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-subclassing-any" type="boolean">
+  Disallow subclassing values of type `Any`.
+  
+  ```bash
+  mypy --disallow-subclassing-any src/
+  ```
+</ParamField>
+
+## Untyped definitions and calls
+
+<ParamField path="--disallow-untyped-calls" type="boolean">
+  Disallow calling untyped functions from typed functions.
+  
+  ```bash
+  mypy --disallow-untyped-calls src/
+  ```
+</ParamField>
+
+<ParamField path="--untyped-calls-exclude MODULE" type="string">
+  Exclude specific packages/modules from `--disallow-untyped-calls`.
+  
+  ```bash
+  mypy --disallow-untyped-calls --untyped-calls-exclude=third_party src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-untyped-defs" type="boolean">
+  Disallow defining functions without type annotations.
+  
+  ```bash
+  mypy --disallow-untyped-defs src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-incomplete-defs" type="boolean">
+  Disallow defining functions with incomplete type annotations.
+  
+  ```bash
+  mypy --disallow-incomplete-defs src/
+  ```
+</ParamField>
+
+<ParamField path="--check-untyped-defs" type="boolean">
+  Type check the interior of functions without type annotations.
+  
+  ```bash
+  mypy --check-untyped-defs src/
+  ```
+</ParamField>
+
+<ParamField path="--disallow-untyped-decorators" type="boolean">
+  Disallow decorating typed functions with untyped decorators.
+  
+  ```bash
+  mypy --disallow-untyped-decorators src/
+  ```
+</ParamField>
+
+## None and Optional handling
+
+<ParamField path="--strict-optional" type="boolean" default="True">
+  Enable strict checking of optional types and `None` values.
+  
+  ```bash
+  mypy --strict-optional src/
+  ```
+</ParamField>
+
+<ParamField path="--no-strict-optional" type="boolean">
+  Disable strict optional checking.
+  
+  ```bash
+  mypy --no-strict-optional src/
+  ```
+  
+  <Warning>
+  Not recommended. This makes `None` compatible with all types.
+  </Warning>
+</ParamField>
+
+<ParamField path="--implicit-optional" type="boolean">
+  Treat arguments with `None` default as having optional type.
+  
+  ```bash
+  mypy --implicit-optional src/
+  ```
+</ParamField>
+
+## Warnings
+
+<ParamField path="--warn-redundant-casts" type="boolean">
+  Warn about redundant casts.
+  
+  ```bash
+  mypy --warn-redundant-casts src/
+  ```
+</ParamField>
+
+<ParamField path="--warn-unused-ignores" type="boolean">
+  Warn about unneeded `# type: ignore` comments.
+  
+  ```bash
+  mypy --warn-unused-ignores src/
+  ```
+</ParamField>
+
+<ParamField path="--no-warn-no-return" type="boolean">
+  Don't warn about missing return statements.
+  
+  ```bash
+  mypy --no-warn-no-return src/
+  ```
+</ParamField>
+
+<ParamField path="--warn-return-any" type="boolean">
+  Warn when returning `Any` from non-`Any` function.
+  
+  ```bash
+  mypy --warn-return-any src/
+  ```
+</ParamField>
+
+<ParamField path="--warn-unreachable" type="boolean">
+  Warn about unreachable code.
+  
+  ```bash
+  mypy --warn-unreachable src/
+  ```
+</ParamField>
+
+## Strictness flags
+
+<ParamField path="--strict" type="boolean">
+  Enable all optional error checking flags.
+  
+  ```bash
+  mypy --strict src/
+  ```
+  
+  <Info>
+  This is equivalent to enabling: `--disallow-any-generics`, `--disallow-untyped-calls`, `--disallow-untyped-defs`, `--disallow-incomplete-defs`, `--check-untyped-defs`, `--disallow-untyped-decorators`, `--warn-redundant-casts`, `--warn-unused-ignores`, `--warn-return-any`, `--no-implicit-reexport`, `--strict-equality`, `--strict-concatenate`, `--extra-checks`
+  </Info>
+</ParamField>
+
+<ParamField path="--allow-untyped-globals" type="boolean">
+  Suppress errors caused by not being able to infer types of global/class variables.
+  
+  ```bash
+  mypy --allow-untyped-globals src/
+  ```
+</ParamField>
+
+<ParamField path="--allow-redefinition" type="boolean">
+  Allow variable redefinition with arbitrary types.
+  
+  ```bash
+  mypy --allow-redefinition src/
+  ```
+</ParamField>
+
+<ParamField path="--local-partial-types" type="boolean">
+  Disallow partial types spanning module top level and function.
+  
+  ```bash
+  mypy --local-partial-types src/
+  ```
+</ParamField>
+
+<ParamField path="--no-implicit-reexport" type="boolean">
+  Require explicit re-export using `from ... as ...` or `__all__`.
+  
+  ```bash
+  mypy --no-implicit-reexport src/
+  ```
+</ParamField>
+
+<ParamField path="--strict-equality" type="boolean">
+  Prohibit equality/identity/container checks between non-overlapping types.
+  
+  ```bash
+  mypy --strict-equality src/
+  ```
+</ParamField>
+
+<ParamField path="--extra-checks" type="boolean">
+  Enable additional checks that are technically correct but impractical.
+  
+  ```bash
+  mypy --extra-checks src/
+  ```
+</ParamField>
+
+## Error codes
+
+<ParamField path="--enable-error-code ERROR_CODE" type="string">
+  Enable specific error codes.
+  
+  ```bash
+  mypy --enable-error-code truthy-bool,ignore-without-code src/
+  ```
+</ParamField>
+
+<ParamField path="--disable-error-code ERROR_CODE" type="string">
+  Disable specific error codes.
+  
+  ```bash
+  mypy --disable-error-code misc,no-untyped-def src/
+  ```
+</ParamField>
+
+## Error message formatting
+
+<ParamField path="--show-error-context" type="boolean">
+  Show context in error messages.
+  
+  ```bash
+  mypy --show-error-context src/
+  ```
+</ParamField>
+
+<ParamField path="--show-column-numbers" type="boolean">
+  Show column numbers in error messages.
+  
+  ```bash
+  mypy --show-column-numbers src/
+  ```
+</ParamField>
+
+<ParamField path="--show-error-code-links" type="boolean">
+  Show documentation links for error codes.
+  
+  ```bash
+  mypy --show-error-code-links src/
+  ```
+</ParamField>
+
+<ParamField path="--hide-error-codes" type="boolean">
+  Hide error codes in error messages.
+  
+  ```bash
+  mypy --hide-error-codes src/
+  ```
+</ParamField>
+
+<ParamField path="--pretty" type="boolean">
+  Use visually nicer output with soft word wrap and source snippets.
+  
+  ```bash
+  mypy --pretty src/
+  ```
+</ParamField>
+
+<ParamField path="--no-color-output" type="boolean">
+  Disable color in error messages.
+  
+  ```bash
+  mypy --no-color-output src/
+  ```
+</ParamField>
+
+<ParamField path="--no-error-summary" type="boolean">
+  Hide error summary.
+  
+  ```bash
+  mypy --no-error-summary src/
+  ```
+</ParamField>
+
+<ParamField path="--show-absolute-path" type="boolean">
+  Show absolute paths in error messages.
+  
+  ```bash
+  mypy --show-absolute-path src/
+  ```
+</ParamField>
+
+## Incremental mode
+
+<ParamField path="--no-incremental" type="boolean">
+  Disable incremental mode.
+  
+  ```bash
+  mypy --no-incremental src/
+  ```
+</ParamField>
+
+<ParamField path="--cache-dir DIR" type="string" default=".mypy_cache">
+  Store cache info in the specified directory.
+  
+  ```bash
+  mypy --cache-dir /tmp/mypy_cache src/
+  ```
+</ParamField>
+
+<ParamField path="--sqlite-cache" type="boolean">
+  Use SQLite database for cache storage.
+  
+  ```bash
+  mypy --sqlite-cache src/
+  ```
+</ParamField>
+
+<ParamField path="--cache-fine-grained" type="boolean">
+  Include fine-grained dependencies in cache.
+  
+  ```bash
+  mypy --cache-fine-grained src/
+  ```
+</ParamField>
+
+<ParamField path="--skip-version-check" type="boolean">
+  Use cache even if generated by different Mypy version.
+  
+  ```bash
+  mypy --skip-version-check src/
+  ```
+</ParamField>
+
+<ParamField path="--skip-cache-mtime-checks" type="boolean">
+  Skip cache internal consistency checks based on mtime.
+  
+  ```bash
+  mypy --skip-cache-mtime-checks src/
+  ```
+</ParamField>
+
+## Reports
+
+<Warning>
+Report generation disables incremental mode and slows down checking.
+</Warning>
+
+<ParamField path="--any-exprs-report DIR" type="string">
+  Generate a report of `Any` expressions.
+  
+  ```bash
+  mypy --any-exprs-report reports/ src/
+  ```
+</ParamField>
+
+<ParamField path="--html-report DIR" type="string">
+  Generate an HTML coverage report.
+  
+  ```bash
+  mypy --html-report htmlcov/ src/
+  ```
+</ParamField>
+
+<ParamField path="--linecount-report DIR" type="string">
+  Generate a line count report.
+  
+  ```bash
+  mypy --linecount-report reports/ src/
+  ```
+</ParamField>
+
+<ParamField path="--linecoverage-report DIR" type="string">
+  Generate a JSON line coverage report.
+  
+  ```bash
+  mypy --linecoverage-report reports/ src/
+  ```
+</ParamField>
+
+## Advanced options
+
+<ParamField path="--plugins PLUGIN" type="string">
+  Specify Mypy plugins to use.
+  
+  ```bash
+  mypy --plugins pydantic.mypy src/
+  ```
+</ParamField>
+
+<ParamField path="--exclude PATTERN" type="string">
+  Exclude files/directories matching the pattern.
+  
+  ```bash
+  mypy --exclude '/tests/' src/
+  ```
+</ParamField>
+
+<ParamField path="--verbose" type="boolean">
+  Show more verbose messages.
+  
+  ```bash
+  mypy --verbose src/
+  ```
+</ParamField>
+
+<ParamField path="--pdb" type="boolean">
+  Invoke debugger on fatal error.
+  
+  ```bash
+  mypy --pdb src/
+  ```
+</ParamField>
+
+<ParamField path="--show-traceback" type="boolean">
+  Show traceback on fatal error.
+  
+  ```bash
+  mypy --show-traceback src/
+  ```
+</ParamField>
+
+<ParamField path="--raise-exceptions" type="boolean">
+  Raise exceptions on fatal errors (for debugging).
+  
+  ```bash
+  mypy --raise-exceptions src/
+  ```
+</ParamField>
+
+## Output options
+
+<ParamField path="--junit-xml FILE" type="string">
+  Write a JUnit XML file with type checking results.
+  
+  ```bash
+  mypy --junit-xml junit.xml src/
+  ```
+</ParamField>
+
+<ParamField path="--junit-format {global,per_file}" type="choice" default="global">
+  Format for JUnit XML output.
+  
+  ```bash
+  mypy --junit-xml junit.xml --junit-format per_file src/
+  ```
+</ParamField>
+
+## Combining flags
+
+<CodeGroup>
+
+```bash Strict checking
+mypy --strict \
+  --show-error-codes \
+  --pretty \
+  src/
+```
+
+```bash Gradual adoption
+mypy --ignore-missing-imports \
+  --follow-imports silent \
+  --disallow-untyped-defs \
+  src/core/
+```
+
+```bash CI configuration
+mypy --config-file mypy.ini \
+  --show-column-numbers \
+  --no-color-output \
+  --junit-xml junit.xml \
+  src/
+```
+
+</CodeGroup>

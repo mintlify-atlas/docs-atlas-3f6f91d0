@@ -1,0 +1,299 @@
+---
+title: Final names, methods and classes
+description: Learn how to use Final to declare constants and prevent overriding.
+---
+
+## Overview
+
+Mypy provides three related features for declaring finality:
+
+1. **Final names** — Variables or attributes that should not be reassigned after initialization
+2. **Final methods** — Methods that should not be overridden in a subclass
+3. **Final classes** — Classes that should not be subclassed
+
+<Note>
+All of these are only enforced by mypy during type checking. There is no runtime enforcement.
+</Note>
+
+## Final names
+
+Use `typing.Final` to indicate that a name should not be reassigned, redefined, or overridden:
+
+```python
+from typing import Final
+
+RATE: Final = 3_000
+
+class Base:
+    DEFAULT_ID: Final = 0
+
+RATE = 300  # Error: can't assign to final attribute
+Base.DEFAULT_ID = 1  # Error: can't override a final attribute
+```
+
+### Protecting attributes from override
+
+Final attributes cannot be overridden in subclasses:
+
+```python
+from typing import Final
+
+class Window:
+    BORDER_WIDTH: Final = 2.5
+
+class ListView(Window):
+    BORDER_WIDTH = 3  # Error: can't override a final attribute
+```
+
+## Syntax variants
+
+You can use `Final` in several ways:
+
+<Tabs>
+  <Tab title="With explicit type">
+    ```python
+    ID: Final[int] = 1
+    # Inferred type: int
+    ```
+  </Tab>
+  
+  <Tab title="Without explicit type">
+    ```python
+    ID: Final = 1
+    # Inferred type: Literal[1]
+    ```
+  </Tab>
+  
+  <Tab title="In class bodies">
+    ```python
+    class Config:
+        MAX_SIZE: Final[int]  # No right-hand side (stub files)
+    ```
+  </Tab>
+  
+  <Tab title="In __init__">
+    ```python
+    class Point:
+        def __init__(self, x: int, y: int) -> None:
+            self.x: Final = x
+            self.y: Final = y
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+When omitting the type, mypy infers `Literal[1]` instead of `int`. This is more precise than `Final[Any]`.
+</Info>
+
+## Details of using Final
+
+Two main rules for defining final names:
+
+<Steps>
+  <Step title="At most one declaration">
+    There can be at most one final declaration per module or class for a given attribute.
+    
+    ```python
+    class A:
+        x: Final = 1
+        x: Final = 2  # Error: duplicate final declaration
+    ```
+  </Step>
+  
+  <Step title="Exactly one assignment">
+    There must be exactly one assignment to a final name.
+    
+    ```python
+    x: Final = 1
+    x = 2  # Error: cannot assign to final name
+    ```
+  </Step>
+</Steps>
+
+### Initialization requirements
+
+A final attribute declared in a class body without an initializer must be initialized in `__init__`:
+
+```python
+class ImmutablePoint:
+    x: Final[int]
+    y: Final[int]  # Error: final attribute without an initializer
+    
+    def __init__(self) -> None:
+        self.x = 1  # Good
+```
+
+## Restrictions
+
+`Final` can only be used as the outermost type:
+
+<CodeGroup>
+```python Invalid usage
+x: list[Final[int]] = []  # Error!
+
+def fun(x: Final[list[int]]) -> None:  # Error!
+    ...
+```
+
+```python Valid usage
+x: Final[list[int]] = []
+
+class A:
+    x: Final[int] = 1
+```
+</CodeGroup>
+
+<Warning>
+`Final` and `ClassVar` should not be used together. Mypy infers the scope automatically.
+</Warning>
+
+## Final vs immutability
+
+`Final` only prevents reassignment, not mutation:
+
+<CodeGroup>
+```python Reassignment prevented
+x: Final = ['a', 'b']
+x = ['c']  # Error: cannot assign to final name
+```
+
+```python Mutation allowed
+x: Final = ['a', 'b']
+x.append('c')  # OK - list is mutable
+```
+</CodeGroup>
+
+To prevent mutation, use immutable types:
+
+```python
+from collections.abc import Sequence
+
+y: Final[Sequence[str]] = ['a', 'b']
+y.append('x')  # Error: Sequence is immutable
+
+z: Final = ('a', 'b')  # Tuples are immutable
+```
+
+## Final methods
+
+Use `@final` decorator to protect methods from being overridden:
+
+```python
+from typing import final
+
+class Base:
+    @final
+    def common_name(self) -> None:
+        ...
+
+class Derived(Base):
+    def common_name(self) -> None:  # Error: cannot override a final method
+        ...
+```
+
+The `@final` decorator works with:
+- Instance methods
+- Class methods
+- Static methods  
+- Properties
+
+### With overloaded methods
+
+For overloaded methods, add `@final` on the implementation:
+
+```python
+from typing import final, overload
+
+class Base:
+    @overload
+    def method(self) -> None: ...
+    @overload
+    def method(self, arg: int) -> int: ...
+    @final
+    def method(self, x=None):
+        ...
+```
+
+## Final classes
+
+Use `@final` decorator on a class to indicate it should not be subclassed:
+
+```python
+from typing import final
+
+@final
+class Leaf:
+    ...
+
+class MyLeaf(Leaf):  # Error: Leaf can't be subclassed
+    ...
+```
+
+### When to use final classes
+
+<AccordionGroup>
+  <Accordion title="Not designed for subclassing">
+    The class wasn't designed to be subclassed. Subclassing might not work as expected or could be error-prone.
+  </Accordion>
+  
+  <Accordion title="Maintain implementation freedom">
+    You want to retain the freedom to change the class implementation arbitrarily in the future without breaking subclasses.
+  </Accordion>
+  
+  <Accordion title="Reduce coupling">
+    Subclassing would make code harder to understand or maintain by creating tight coupling between base and derived classes.
+  </Accordion>
+</AccordionGroup>
+
+### Invalid: Final abstract classes
+
+An abstract class with `@final` decorator will generate an error:
+
+```python
+from abc import ABCMeta, abstractmethod
+from typing import final
+
+@final
+class A(metaclass=ABCMeta):  # Error: Final class has abstract attributes
+    @abstractmethod
+    def f(self, x: int) -> None:
+        pass
+```
+
+<Note>
+Final classes cannot have abstract methods since those attributes could never be implemented.
+</Note>
+
+## Overriding final attributes
+
+A final attribute can override a read-only property:
+
+```python
+class Base:
+    @property
+    def ID(self) -> int:
+        ...
+
+class Derived(Base):
+    ID: Final = 1  # OK - overriding a property with Final
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use Final for constants">
+    Module-level and class-level constants should be marked as `Final` to prevent accidental modification.
+  </Accordion>
+  
+  <Accordion title="Combine with descriptive names">
+    Use UPPER_CASE naming for final constants to make them visually distinct.
+  </Accordion>
+  
+  <Accordion title="Use @final for framework code">
+    When building frameworks or libraries, use `@final` on methods that shouldn't be overridden to maintain invariants.
+  </Accordion>
+  
+  <Accordion title="Document why something is final">
+    Add comments explaining why a class or method is marked final to help future maintainers.
+  </Accordion>
+</AccordionGroup>

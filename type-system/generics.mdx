@@ -1,0 +1,355 @@
+---
+title: Generics
+description: Learn how to define and use generic classes and functions in Mypy.
+---
+
+## Defining generic classes
+
+Generic types accept one or more type arguments. Here's a simple generic class using Python 3.12 syntax:
+
+<Tabs>
+  <Tab title="Python 3.12+">
+    ```python
+    class Stack[T]:
+        def __init__(self) -> None:
+            self.items: list[T] = []
+        
+        def push(self, item: T) -> None:
+            self.items.append(item)
+        
+        def pop(self) -> T:
+            return self.items.pop()
+        
+        def empty(self) -> bool:
+            return not self.items
+    ```
+  </Tab>
+  
+  <Tab title="Python 3.11 and earlier">
+    ```python
+    from typing import TypeVar, Generic
+    
+    T = TypeVar('T')
+    
+    class Stack(Generic[T]):
+        def __init__(self) -> None:
+            self.items: list[T] = []
+        
+        def push(self, item: T) -> None:
+            self.items.append(item)
+        
+        def pop(self) -> T:
+            return self.items.pop()
+        
+        def empty(self) -> bool:
+            return not self.items
+    ```
+  </Tab>
+</Tabs>
+
+## Using generic classes
+
+```python
+# Construct an empty Stack[int] instance
+stack = Stack[int]()
+stack.push(2)
+stack.pop()
+
+stack.push('x')  # Error: Argument 1 has incompatible type "str"; expected "int"
+
+stack2: Stack[str] = Stack()
+stack2.push('x')  # OK
+```
+
+Construction of generic instances is type checked:
+
+```python
+class Box[T]:
+    def __init__(self, content: T) -> None:
+        self.content = content
+
+Box(1)       # OK, inferred type is Box[int]
+Box[int](1)  # Also OK
+Box[int]('some string')  # Error: Argument 1 has incompatible type "str"
+```
+
+## Generic functions
+
+Functions can also be generic:
+
+<Tabs>
+  <Tab title="Python 3.12+">
+    ```python
+    from collections.abc import Sequence
+    
+    def first[T](seq: Sequence[T]) -> T:
+        return seq[0]
+    
+    reveal_type(first([1, 2, 3]))   # Revealed type is "builtins.int"
+    reveal_type(first(('a', 'b')))  # Revealed type is "builtins.str"
+    ```
+  </Tab>
+  
+  <Tab title="Python 3.11 and earlier">
+    ```python
+    from typing import TypeVar, Sequence
+    
+    T = TypeVar('T')
+    
+    def first(seq: Sequence[T]) -> T:
+        return seq[0]
+    
+    reveal_type(first([1, 2, 3]))   # Revealed type is "builtins.int"
+    reveal_type(first(('a', 'b')))  # Revealed type is "builtins.str"
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+You cannot explicitly pass type parameter values when calling generic functions. Type parameters are always inferred.
+</Note>
+
+## Type variables with upper bounds
+
+You can restrict a type variable to having values that are subtypes of a specific type:
+
+<Tabs>
+  <Tab title="Python 3.12+">
+    ```python
+    from typing import SupportsAbs
+    
+    def max_by_abs[T: SupportsAbs[float]](*xs: T) -> T:
+        return max(xs, key=abs)
+    
+    max_by_abs(-3.5, 2)   # OK, has type 'float'
+    max_by_abs(5+6j, 7)   # OK, has type 'complex'
+    max_by_abs('a', 'b')  # Error: 'str' is not a subtype of SupportsAbs[float]
+    ```
+  </Tab>
+  
+  <Tab title="Python 3.11 and earlier">
+    ```python
+    from typing import TypeVar, SupportsAbs
+    
+    T = TypeVar('T', bound=SupportsAbs[float])
+    
+    def max_by_abs(*xs: T) -> T:
+        return max(xs, key=abs)
+    ```
+  </Tab>
+</Tabs>
+
+## Generic methods and generic self
+
+You can define generic methods that return the most precise type known:
+
+<Tabs>
+  <Tab title="Python 3.12+">
+    ```python
+    class Shape:
+        def set_scale[T: Shape](self: T, scale: float) -> T:
+            self.scale = scale
+            return self
+    
+    class Circle(Shape):
+        def set_radius(self, r: float) -> 'Circle':
+            self.radius = r
+            return self
+    
+    circle: Circle = Circle().set_scale(0.5).set_radius(2.7)  # OK
+    ```
+  </Tab>
+  
+  <Tab title="Python 3.11 and earlier">
+    ```python
+    from typing import TypeVar
+    
+    T = TypeVar('T', bound='Shape')
+    
+    class Shape:
+        def set_scale(self: T, scale: float) -> T:
+            self.scale = scale
+            return self
+    ```
+  </Tab>
+</Tabs>
+
+## Automatic self types using typing.Self
+
+Python 3.11+ provides a simpler syntax using `Self`:
+
+```python
+from typing import Self
+
+class Friend:
+    other: Self | None = None
+    
+    @classmethod
+    def make_pair(cls) -> tuple[Self, Self]:
+        a, b = cls(), cls()
+        a.other = b
+        b.other = a
+        return a, b
+
+class SuperFriend(Friend):
+    pass
+
+a, b = SuperFriend.make_pair()  # Type is tuple[SuperFriend, SuperFriend]
+```
+
+## Variance of generic types
+
+There are three kinds of variance:
+
+<AccordionGroup>
+  <Accordion title="Covariant">
+    If `B` is a subtype of `A`, then `MyCovGen[B]` is a subtype of `MyCovGen[A]`.
+    
+    ```python
+    from collections.abc import Sequence
+    
+    class Shape: ...
+    class Triangle(Shape): ...
+    
+    def count_sides(shapes: Sequence[Shape]) -> int:
+        return sum(s.num_sides for s in shapes)
+    
+    triangles: Sequence[Triangle]
+    count_sides(triangles)  # OK - Sequence is covariant
+    ```
+  </Accordion>
+  
+  <Accordion title="Contravariant">
+    If `B` is a subtype of `A`, then `MyContraGen[A]` is a subtype of `MyContraGen[B]`.
+    
+    ```python
+    from collections.abc import Callable
+    
+    def cost_of_paint_required(
+        triangle: Triangle,
+        area_calculator: Callable[[Triangle], float]
+    ) -> float:
+        return area_calculator(triangle) * DOLLAR_PER_SQ_FT
+    
+    # This works!
+    def area_of_any_shape(shape: Shape) -> float: ...
+    cost_of_paint_required(triangle, area_of_any_shape)  # OK
+    ```
+  </Accordion>
+  
+  <Accordion title="Invariant">
+    Neither covariant nor contravariant.
+    
+    ```python
+    def add_one(things: list[Shape]) -> None:
+        things.append(Shape())
+    
+    my_circles: list[Circle] = []
+    add_one(my_circles)  # Error: list is invariant
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Type variables with value restriction
+
+Sometimes you want a type variable that can only have specific types:
+
+<Tabs>
+  <Tab title="Python 3.12+">
+    ```python
+    def concat[S: (str, bytes)](x: S, y: S) -> S:
+        return x + y
+    
+    concat('a', 'b')    # OK
+    concat(b'a', b'b')  # OK
+    concat('a', b'b')   # Error: Cannot mix str and bytes
+    concat(1, 2)        # Error: int not allowed
+    ```
+  </Tab>
+  
+  <Tab title="Python 3.11 and earlier">
+    ```python
+    from typing import TypeVar
+    
+    AnyStr = TypeVar('AnyStr', str, bytes)
+    
+    def concat(x: AnyStr, y: AnyStr) -> AnyStr:
+        return x + y
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+This is different from a union type. `concat('string', b'bytes')` is not allowed with value restrictions, but would be allowed with `str | bytes`.
+</Warning>
+
+## Generic type aliases
+
+Type aliases can be generic:
+
+<Tabs>
+  <Tab title="Python 3.12+">
+    ```python
+    from collections.abc import Iterable
+    
+    type Vec[T: (int, float, complex)] = Iterable[tuple[T, T]]
+    
+    def inproduct[T: (int, float, complex)](v: Vec[T]) -> T:
+        return sum(x*y for x, y in v)
+    
+    v1: Vec[int] = []  # Same as Iterable[tuple[int, int]]
+    ```
+  </Tab>
+  
+  <Tab title="Python 3.11 and earlier">
+    ```python
+    from typing import TypeVar, Iterable
+    
+    T = TypeVar('T', int, float, complex)
+    Vec = Iterable[tuple[T, T]]
+    
+    def inproduct(v: Vec[T]) -> T:
+        return sum(x*y for x, y in v)
+    ```
+  </Tab>
+</Tabs>
+
+## Generic protocols
+
+Mypy supports generic protocols:
+
+```python
+from typing import Protocol
+
+class Box[T](Protocol):
+    content: T
+
+def do_stuff(one: Box[str], other: Box[bytes]) -> None:
+    ...
+
+class StringWrapper:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+do_stuff(StringWrapper('one'), ...)  # OK
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use descriptive type parameter names">
+    For single parameters, `T` is conventional. For multiple parameters, use descriptive names like `KT` (key type) and `VT` (value type).
+  </Accordion>
+  
+  <Accordion title="Prefer the new syntax on Python 3.12+">
+    The new syntax is more readable and concise.
+  </Accordion>
+  
+  <Accordion title="Use Self for better ergonomics">
+    `Self` is cleaner than explicit type parameters for methods that return the same type.
+  </Accordion>
+  
+  <Accordion title="Understand variance">
+    Knowing when types are covariant, contravariant, or invariant helps you design better APIs.
+  </Accordion>
+</AccordionGroup>

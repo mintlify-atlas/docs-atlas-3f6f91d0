@@ -1,0 +1,646 @@
+---
+title: Type error codes
+description: Error codes for type checking violations
+---
+
+Type error codes catch incompatibilities between types in your code. These are the most common errors you'll encounter when using Mypy.
+
+## Attribute errors
+
+### attr-defined
+
+Check that an attribute exists in the target class or module.
+
+```python
+ATTR_DEFINED = ErrorCode(
+    "attr-defined",
+    "Check that attribute exists",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+class Resource:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+r = Resource('x')
+print(r.name)  # OK
+print(r.id)  # Error: "Resource" has no attribute "id"  [attr-defined]
+```
+
+**When it triggers:**
+- Accessing undefined attributes with dot notation
+- Importing names that don't exist in a module
+- Misspelling attribute names
+
+### union-attr
+
+Check that an attribute exists in each item of a union type.
+
+```python
+UNION_ATTR = ErrorCode(
+    "union-attr",
+    "Check that attribute exists in each item of a union",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+class Cat:
+    def meow(self) -> None: ...
+
+class Dog:
+    def bark(self) -> None: ...
+
+def make_sound(animal: Cat | Dog) -> None:
+    animal.meow()  # Error: Item "Dog" of "Cat | Dog" has no attribute "meow"  [union-attr]
+```
+
+## Function call errors
+
+### call-arg
+
+Check that the number and names of arguments match the called function.
+
+```python
+CALL_ARG = ErrorCode(
+    "call-arg",
+    "Check number, names and kinds of arguments in calls",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+def greet(name: str) -> None:
+    print('hello', name)
+
+greet('jack')  # OK
+greet('jill', 'jack')  # Error: Too many arguments for "greet"  [call-arg]
+greet()  # Error: Missing positional argument "name"  [call-arg]
+```
+
+### arg-type
+
+Check that argument types match the declared parameter types.
+
+```python
+ARG_TYPE = ErrorCode(
+    "arg-type",
+    "Check argument types in calls",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+def add(x: int, y: int) -> int:
+    return x + y
+
+add(1, 2)  # OK
+add(1, "2")  # Error: Argument 2 to "add" has incompatible type "str"; expected "int"  [arg-type]
+```
+
+### call-overload
+
+Check that at least one overload variant matches the call.
+
+```python
+CALL_OVERLOAD = ErrorCode(
+    "call-overload",
+    "Check that an overload variant matches arguments",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import overload
+
+@overload
+def process(x: int) -> str: ...
+@overload
+def process(x: str) -> int: ...
+def process(x: int | str) -> int | str:
+    return str(x) if isinstance(x, int) else int(x)
+
+process(42)  # OK
+process("hello")  # OK  
+process(3.14)  # Error: No overload variant matches argument type "float"  [call-overload]
+```
+
+## Return errors
+
+### return
+
+Check that a function always returns a value when required.
+
+```python
+RETURN = ErrorCode(
+    "return",
+    "Check that function always returns a value",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+def get_value(x: int) -> int:
+    if x > 0:
+        return x
+    # Error: Missing return statement  [return]
+```
+
+### return-value
+
+Check that the return value is compatible with the function signature.
+
+```python
+RETURN_VALUE = ErrorCode(
+    "return-value",
+    "Check that return value is compatible with signature",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+def get_name() -> str:
+    return "Alice"  # OK
+
+def get_age() -> int:
+    return "25"  # Error: Incompatible return value type (got "str", expected "int")  [return-value]
+```
+
+## Assignment errors
+
+### assignment
+
+Check that the assigned value is compatible with the target.
+
+```python
+ASSIGNMENT = ErrorCode(
+    "assignment",
+    "Check that assigned value is compatible with target",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+x: int = 42  # OK
+y: str = "hello"  # OK
+x = "world"  # Error: Incompatible types in assignment (expression has type "str", variable has type "int")  [assignment]
+```
+
+### method-assign
+
+Check that assignment target is not a method.
+
+```python
+METHOD_ASSIGN = ErrorCode(
+    "method-assign",
+    "Check that assignment target is not a method",
+    "General",
+    sub_code_of=ASSIGNMENT,
+)
+```
+
+<Note>
+  This is a sub-code of `assignment`. Ignoring `assignment` will also ignore `method-assign`.
+</Note>
+
+**Example:**
+
+```python
+class MyClass:
+    def method(self) -> None: ...
+
+MyClass.method = lambda self: None  # Error: Cannot assign to a method  [method-assign]
+```
+
+## Type checking errors
+
+### valid-type
+
+Check that a type annotation is a valid type.
+
+```python
+VALID_TYPE = ErrorCode(
+    "valid-type",
+    "Check that type (annotation) is valid",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+def log(x: object) -> None:
+    print('log:', repr(x))
+
+# Error: Function "log" is not valid as a type  [valid-type]
+def process(f: log) -> None:
+    f("hello")
+
+# Correct:
+from collections.abc import Callable
+def process(f: Callable[[object], None]) -> None:
+    f("hello")
+```
+
+### type-arg
+
+Check that generic type has the required type arguments.
+
+```python
+TYPE_ARG = ErrorCode(
+    "type-arg",
+    "Check that generic type arguments are present",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+# Error: Missing type arguments for generic type "list"  [type-arg]
+def process(items: list) -> None:
+    ...
+
+# Correct:
+def process(items: list[int]) -> None:
+    ...
+```
+
+<Note>
+  This error only appears when using `--disallow-any-generics`.
+</Note>
+
+### type-var
+
+Check that type variable values are valid.
+
+```python
+TYPE_VAR = ErrorCode(
+    "type-var",
+    "Check that type variable values are valid",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import TypeVar
+
+T = TypeVar('T', int, str)
+
+def process(x: T) -> T:
+    return x
+
+process(42)  # OK
+process("hello")  # OK
+process(3.14)  # Error: Value of type variable "T" cannot be "float"  [type-var]
+```
+
+## Operator errors
+
+### operator
+
+Check that operators are valid for the operands.
+
+```python
+OPERATOR = ErrorCode(
+    "operator",
+    "Check that operator is valid for operands",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+x = 1 + 2  # OK
+y = "hello" + " world"  # OK
+z = 1 + "hello"  # Error: Unsupported operand types for + ("int" and "str")  [operator]
+```
+
+### index
+
+Check that indexing operations are valid.
+
+```python
+INDEX = ErrorCode(
+    "index",
+    "Check indexing operations",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+items = [1, 2, 3]
+x = items[0]  # OK
+y = items["key"]  # Error: Invalid index type "str" for "list[int]"; expected type "int"  [index]
+```
+
+## Container errors
+
+### list-item
+
+Check list items in list expressions.
+
+```python
+LIST_ITEM = ErrorCode(
+    "list-item",
+    "Check list items in a list expression [item, ...]",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+items: list[int] = [1, 2, 3]  # OK
+names: list[str] = ["a", "b", 3]  # Error: List item 2 has incompatible type "int"; expected "str"  [list-item]
+```
+
+### dict-item
+
+Check dict items in dict expressions.
+
+```python
+DICT_ITEM = ErrorCode(
+    "dict-item",
+    "Check dict items in a dict expression {key: value, ...}",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+mapping: dict[str, int] = {"a": 1, "b": 2}  # OK
+wrong: dict[str, int] = {"a": "wrong"}  # Error: Dict entry 0 has incompatible type "str": "str"; expected "str": "int"  [dict-item]
+```
+
+### typeddict-item
+
+Check TypedDict items.
+
+```python
+TYPEDDICT_ITEM = ErrorCode(
+    "typeddict-item",
+    "Check items when constructing TypedDict",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from typing import TypedDict
+
+class Person(TypedDict):
+    name: str
+    age: int
+
+p: Person = {"name": "Alice", "age": 30}  # OK
+wrong: Person = {"name": "Bob", "age": "thirty"}  # Error: Incompatible types (expression has type "str", TypedDict item "age" has type "int")  [typeddict-item]
+```
+
+### typeddict-unknown-key
+
+Check for unknown keys in TypedDict.
+
+```python
+TYPEDDICT_UNKNOWN_KEY = ErrorCode(
+    "typeddict-unknown-key",
+    "Check unknown keys when constructing TypedDict",
+    "General",
+    sub_code_of=TYPEDDICT_ITEM,
+)
+```
+
+**Example:**
+
+```python
+from typing import TypedDict
+
+class Point(TypedDict):
+    x: int
+    y: int
+
+p: Point = {"x": 1, "y": 2, "z": 3}  # Error: Extra key "z" for TypedDict "Point"  [typeddict-unknown-key]
+```
+
+## Override errors
+
+### override
+
+Check that method overrides are compatible with the base class.
+
+```python
+OVERRIDE = ErrorCode(
+    "override",
+    "Check that method override is compatible with base class",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+class Base:
+    def method(self, x: int) -> str:
+        return str(x)
+
+class Derived(Base):
+    # Error: Argument 1 of "method" is incompatible with "Base"  [override]
+    def method(self, x: str) -> str:
+        return x
+```
+
+## Other type errors
+
+### has-type
+
+Check that the type of a reference can be determined.
+
+```python
+HAS_TYPE = ErrorCode(
+    "has-type",
+    "Check that type of reference can be determined",
+    "General"
+)
+```
+
+### var-annotated
+
+Require type annotation when the type can't be inferred.
+
+```python
+VAR_ANNOTATED = ErrorCode(
+    "var-annotated",
+    "Require variable annotation if type can't be inferred",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+class Container:
+    def __init__(self) -> None:
+        # Error: Need type annotation for "items"  [var-annotated]
+        self.items = []
+        
+        # Correct:
+        self.items: list[str] = []
+```
+
+### func-returns-value
+
+Check that a function returns a value when used in a value context.
+
+```python
+FUNC_RETURNS_VALUE = ErrorCode(
+    "func-returns-value",
+    "Check that called function returns a value in value context",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+def log(msg: str) -> None:
+    print(msg)
+
+# Error: "log" does not return a value  [func-returns-value]
+result = log("hello")
+```
+
+### abstract
+
+Prevent instantiation of abstract classes.
+
+```python
+ABSTRACT = ErrorCode(
+    "abstract",
+    "Prevent instantiation of classes with abstract attributes",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+from abc import ABC, abstractmethod
+
+class Base(ABC):
+    @abstractmethod
+    def method(self) -> None: ...
+
+# Error: Cannot instantiate abstract class "Base" with abstract attribute "method"  [abstract]
+obj = Base()
+```
+
+### comparison-overlap
+
+Check that types in comparisons overlap.
+
+```python
+COMPARISON_OVERLAP = ErrorCode(
+    "comparison-overlap",
+    "Check that types in comparisons and 'in' expressions overlap",
+    "General"
+)
+```
+
+<Note>
+  This error only appears when using `--strict-equality`.
+</Note>
+
+**Example:**
+
+```python
+# mypy: strict-equality
+
+x: int = 5
+y: str = "5"
+
+# Error: Non-overlapping equality check (left operand type: "int", right operand type: "str")  [comparison-overlap]
+if x == y:
+    pass
+```
+
+## String formatting
+
+### str-format
+
+Check that string formatting is type-safe.
+
+```python
+STRING_FORMATTING = ErrorCode(
+    "str-format",
+    "Check that string formatting/interpolation is type-safe",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+name = "Alice"
+age = 30
+
+f"{name} is {age} years old"  # OK
+"{} and {}".format("spam")  # Error: Cannot find replacement for positional format specifier 1  [str-format]
+
+"{:d}".format(3.14)  # Error: Incompatible types in string interpolation  [str-format]
+```
+
+### str-bytes-safe
+
+Warn about implicit bytes coercions.
+
+```python
+STR_BYTES_PY3 = ErrorCode(
+    "str-bytes-safe",
+    "Warn about implicit coercions related to bytes and string types",
+    "General"
+)
+```
+
+**Example:**
+
+```python
+b = b"hello"
+
+# Error: If x = b'abc' then f"{x}" produces "b'abc'", not "abc"  [str-bytes-safe]
+print(f"Message: {b}")
+
+# Correct:
+print(f"Message: {b.decode('utf-8')}")
+print(f"Message: {b!r}")  # OK if you want "b'hello'"
+```
+
+## See also
+
+- [Error codes overview](/api/error-codes/overview) - Error code system
+- [Syntax errors](/api/error-codes/syntax-errors) - Syntax error codes
+- [Other errors](/api/error-codes/other-errors) - Import and definition errors

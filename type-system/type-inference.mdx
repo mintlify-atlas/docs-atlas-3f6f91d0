@@ -1,0 +1,196 @@
+---
+title: Type inference
+description: Understand how Mypy infers types automatically.
+---
+
+## How type inference works
+
+For most variables, if you don't explicitly specify a type, mypy will infer the correct type based on what is initially assigned to the variable.
+
+```python
+# Mypy infers types automatically
+i = 1
+reveal_type(i)  # Revealed type is "builtins.int"
+
+l = [1, 2]
+reveal_type(l)  # Revealed type is "builtins.list[builtins.int]"
+```
+
+## When inference doesn't work
+
+Mypy will not use type inference in dynamically typed functions (those without a function type annotation):
+
+```python
+def untyped_function():
+    i = 1
+    reveal_type(i)  # Revealed type is "Any"
+```
+
+<Warning>
+In unchecked functions, every local variable type defaults to `Any`, disabling type checking.
+</Warning>
+
+## Bidirectional type inference
+
+Type inference is bidirectional and takes context into account. Mypy considers the type of the variable on the left-hand side when inferring the type of the expression on the right-hand side.
+
+<Tabs>
+  <Tab title="Context-aware inference">
+    ```python
+    def f(l: list[object]) -> None:
+        l = [1, 2]  # Infer type list[object] for [1, 2], not list[int]
+    ```
+    
+    The expression `[1, 2]` is type checked with the context that it's being assigned to a variable of type `list[object]`.
+  </Tab>
+  
+  <Tab title="Function arguments">
+    ```python
+    def foo(arg: list[int]) -> None:
+        print('Items:', ', '.join(str(a) for a in arg))
+    
+    foo([])  # OK - mypy infers [] as list[int] from the parameter type
+    ```
+    
+    Declared argument types are used for type context.
+  </Tab>
+</Tabs>
+
+## Single statement limitation
+
+Context only works within a single statement. When context would only be available in a following statement, mypy requires an annotation:
+
+<CodeGroup>
+```python Error - No context
+def foo(arg: list[int]) -> None:
+    print('Items:', ', '.join(str(a) for a in arg))
+
+a = []  # Error: Need type annotation for "a"
+foo(a)
+```
+
+```python Fixed - With annotation
+def foo(arg: list[int]) -> None:
+    print('Items:', ', '.join(str(a) for a in arg))
+
+a: list[int] = []  # OK
+foo(a)
+```
+</CodeGroup>
+
+## Empty collections
+
+The type checker cannot always infer the type of an empty list or dictionary. You need to give the type explicitly:
+
+```python
+l = []  # Error: Need type annotation for "l"
+
+# Solutions:
+l: list[int] = []       # Explicit annotation
+d: dict[str, int] = {}  # For dictionaries too
+```
+
+## Mixed None and non-None values
+
+If you assign both a `None` value and a non-`None` value in the same scope, mypy can infer the combined type:
+
+```python
+def f(i: int) -> None:
+    n = None  # Inferred type 'int | None' because of assignment below
+    if i > 0:
+        n = i
+    # n has type int | None here
+```
+
+<Info>
+Mypy uses the first assignment to infer the type, but looks ahead within the same scope to detect `None` assignments.
+</Info>
+
+## Container compatibility
+
+Container types can be unintuitive. Mypy treats `list[int]` as incompatible with `list[object]`:
+
+```python
+def f(l: list[object], k: list[int]) -> None:
+    l = k  # Error: Incompatible types in assignment
+```
+
+This prevents non-int values from being stored in a list of `int`:
+
+```python
+def f(l: list[object], k: list[int]) -> None:
+    l = k
+    l.append('x')  # Would put a string in list[int]!
+    print(k[-1])   # Oops; a string in list[int]
+```
+
+<Note>
+Other container types like `dict` and `set` behave similarly. See [variance](/type-system/generics#variance-of-generic-types) for more details.
+</Note>
+
+## Explicit types override inference
+
+You can override the inferred type using a variable type annotation:
+
+<Steps>
+  <Step title="Simple override">
+    ```python
+    x: int | str = 1
+    # Without annotation: type would be int
+    # With annotation: type is int | str
+    ```
+  </Step>
+  
+  <Step title="Collection override">
+    ```python
+    items: list[object] = [1, 2, 3]
+    # Without annotation: list[int]
+    # With annotation: list[object]
+    ```
+  </Step>
+  
+  <Step title="Invalid override">
+    ```python
+    x: int | str = 1.1  # Error: Incompatible types in assignment
+                        # expression has type "float"
+                        # variable has type "int | str"
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+The type annotation sets the type of the variable, not the type of the expression.
+</Tip>
+
+## Variables without initial values
+
+You can declare the type of a variable without giving it an initial value:
+
+```python
+# We only unpack two values, so there's no right-hand side value
+# for mypy to infer the type of "cs" from:
+a, b, *cs = 1, 2  # Error: Need type annotation for "cs"
+
+rs: list[int]  # No assignment!
+p, q, *rs = 1, 2  # OK
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Annotate function signatures">
+    Always provide type annotations for function parameters and return types. This helps mypy infer types in the function body.
+  </Accordion>
+  
+  <Accordion title="Let mypy infer local variables">
+    Usually you don't need to annotate local variables if mypy can infer their types correctly from assignments.
+  </Accordion>
+  
+  <Accordion title="Annotate empty collections">
+    Always provide explicit type annotations for empty lists, dictionaries, and other collections.
+  </Accordion>
+  
+  <Accordion title="Use reveal_type for debugging">
+    Use `reveal_type()` to see what type mypy has inferred during development.
+  </Accordion>
+</AccordionGroup>

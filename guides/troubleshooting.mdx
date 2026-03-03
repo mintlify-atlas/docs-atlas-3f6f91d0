@@ -1,0 +1,496 @@
+---
+title: Troubleshooting guide
+description: Solutions for common mypy problems and debugging techniques
+---
+
+This guide helps you diagnose and fix common problems when using mypy.
+
+## Installation issues
+
+### Mypy not found after installation
+
+If `mypy` command is not found:
+
+<Steps>
+  <Step title="Check installation">
+    ```bash
+    python3 -m mypy --version
+    ```
+  </Step>
+
+  <Step title="Verify PATH">
+    Ensure pip's bin directory is in your PATH:
+    ```bash
+    python3 -m pip show mypy
+    ```
+  </Step>
+
+  <Step title="Use python -m">
+    Always run as module if command not found:
+    ```bash
+    python3 -m mypy myproject
+    ```
+  </Step>
+</Steps>
+
+### Version conflicts
+
+```bash
+# Check installed version
+python3 -m mypy --version
+
+# Install specific version
+python3 -m pip install mypy==1.8.0
+
+# Upgrade to latest
+python3 -m pip install --upgrade mypy
+```
+
+## Module and import issues
+
+### Cannot find implementation or library stub
+
+```
+error: Cannot find implementation or library stub for module named 'foo'
+```
+
+<Accordion title="Solution 1: Install the package">
+  The module might not be installed:
+
+  ```bash
+  pip install foo
+  ```
+</Accordion>
+
+<Accordion title="Solution 2: Install stub package">
+  Install type stubs:
+
+  ```bash
+  pip install types-foo
+  # Or use mypy's helper:
+  mypy --install-types
+  ```
+</Accordion>
+
+<Accordion title="Solution 3: Ignore missing imports">
+  Add to mypy.ini:
+
+  ```ini
+  [mypy-foo.*]
+  ignore_missing_imports = True
+  ```
+</Accordion>
+
+<Accordion title="Solution 4: Create stub file">
+  Create a minimal stub:
+
+  ```python
+  # stubs/foo.pyi
+  def bar(x: int) -> str: ...
+  ```
+
+  Then:
+  ```bash
+  export MYPYPATH=./stubs
+  ```
+</Accordion>
+
+### Module not found in MYPYPATH
+
+Verify MYPYPATH is set correctly:
+
+```bash
+echo $MYPYPATH
+export MYPYPATH=/path/to/stubs:$MYPYPATH
+```
+
+### Namespace package issues
+
+For namespace packages without `__init__.py`:
+
+```bash
+mypy --namespace-packages mypackage
+```
+
+Or in configuration:
+
+```ini
+[mypy]
+namespace_packages = True
+```
+
+## Configuration issues
+
+### Config file not found
+
+Mypy searches for config files in this order:
+
+1. `mypy.ini`
+2. `.mypy.ini`
+3. `pyproject.toml`
+4. `setup.cfg`
+
+Specify explicitly:
+
+```bash
+mypy --config-file custom-mypy.ini myproject
+```
+
+### Config options not working
+
+Verify the config is being read:
+
+```bash
+mypy --verbose myproject | grep "mypy.ini"
+```
+
+Check for syntax errors in config file:
+
+```ini
+# Wrong - don't use quotes
+[mypy]
+python_version = "3.10"
+
+# Correct
+[mypy]
+python_version = 3.10
+```
+
+### Per-module config not applying
+
+Module patterns must match import names:
+
+```ini
+# Wrong - using file paths
+[mypy-src/myproject/utils.py]
+
+# Correct - using module names
+[mypy-myproject.utils]
+```
+
+## Cache issues
+
+### Stale cache causing errors
+
+Clear the cache:
+
+```bash
+rm -rf .mypy_cache
+mypy myproject
+```
+
+Or disable caching temporarily:
+
+```bash
+mypy --no-incremental myproject
+```
+
+### Cache permission errors
+
+```bash
+# Fix permissions
+chmod -R u+w .mypy_cache
+
+# Or use different cache location
+mypy --cache-dir=/tmp/mypy_cache myproject
+```
+
+## Type checking issues
+
+### False positives
+
+Mypy reports errors that seem incorrect:
+
+<Tabs>
+  <Tab title="Use reveal_type">
+    Debug what mypy thinks:
+
+    ```python
+    reveal_type(x)  # Shows what mypy infers
+    ```
+  </Tab>
+
+  <Tab title="Check for Any">
+    `Any` can hide issues:
+
+    ```bash
+    mypy --disallow-any-unimported --disallow-any-expr myproject
+    ```
+  </Tab>
+
+  <Tab title="Update stubs">
+    Stubs may be outdated:
+
+    ```bash
+    pip install --upgrade types-requests
+    ```
+  </Tab>
+</Tabs>
+
+### False negatives
+
+Mypy doesn't catch obvious errors:
+
+1. **Missing annotations**: Add type hints to functions
+2. **Any leakage**: Check for implicit `Any` types
+3. **Ignored files**: Verify files are being checked
+
+```bash
+mypy --warn-return-any --warn-unused-ignores myproject
+```
+
+## Performance issues
+
+### Slow initial run
+
+For large codebases:
+
+<Steps>
+  <Step title="Use daemon mode">
+    ```bash
+    dmypy start
+    dmypy run -- myproject
+    ```
+  </Step>
+
+  <Step title="Enable incremental mode">
+    ```ini
+    [mypy]
+    incremental = True
+    ```
+  </Step>
+
+  <Step title="Exclude unnecessary files">
+    ```ini
+    [mypy]
+    exclude = (?x)(
+        ^tests/
+        | ^build/
+        | ^venv/
+    )
+    ```
+  </Step>
+</Steps>
+
+### Slow incremental runs
+
+```bash
+# Skip version check
+mypy --skip-version-check myproject
+
+# Skip cache mtime checks
+mypy --skip-cache-mtime-checks myproject
+```
+
+### Memory issues
+
+```bash
+# Reduce memory usage
+export MYPYC_OPT_LEVEL=0
+mypy --no-incremental myproject
+```
+
+## Daemon mode (dmypy) issues
+
+### Daemon won't start
+
+Check if already running:
+
+```bash
+dmypy status
+dmypy stop
+dmypy start
+```
+
+### Daemon returns stale results
+
+Restart the daemon:
+
+```bash
+dmypy restart
+```
+
+Or force recheck:
+
+```bash
+dmypy recheck
+```
+
+### Socket errors
+
+```bash
+# Kill daemon and remove socket
+dmypy kill
+rm -f .dmypy.json
+dmypy start
+```
+
+## Platform-specific issues
+
+### Windows path issues
+
+```bash
+# Use forward slashes or double backslashes
+mypy myproject/main.py
+mypy myproject\\main.py
+```
+
+### macOS compilation issues
+
+If mypyc compilation fails:
+
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Or use interpreted version
+pip install --no-binary mypy mypy
+```
+
+## Debugging techniques
+
+### Enable verbose output
+
+```bash
+mypy --verbose myproject
+```
+
+This shows:
+- Which files are being checked
+- Which config file is being used
+- Import resolution details
+
+### Show traceback for crashes
+
+```bash
+mypy --pdb --show-traceback myproject
+```
+
+### Export type information
+
+```bash
+# Generate HTML report
+mypy --html-report report myproject
+
+# Generate text report
+mypy --txt-report report myproject
+```
+
+### Use reveal_type and reveal_locals
+
+```python
+def debug_function(x, y):
+    reveal_type(x)  # Shows type of x
+    z = x + y
+    reveal_locals()  # Shows all local types
+    return z
+```
+
+## CI/CD issues
+
+### Mypy fails in CI but passes locally
+
+<Accordion title="Check Python version">
+  Ensure CI uses same Python version:
+
+  ```yaml
+  - uses: actions/setup-python@v4
+    with:
+      python-version: '3.10'  # Match local version
+  ```
+</Accordion>
+
+<Accordion title="Check mypy version">
+  Pin mypy version:
+
+  ```yaml
+  - run: pip install mypy==1.8.0
+  ```
+</Accordion>
+
+<Accordion title="Check dependencies">
+  Install all dependencies:
+
+  ```yaml
+  - run: pip install -r requirements.txt
+  ```
+</Accordion>
+
+<Accordion title="Clear cache in CI">
+  Don't cache mypy cache:
+
+  ```yaml
+  - run: rm -rf .mypy_cache && mypy myproject
+  ```
+</Accordion>
+
+## Common error patterns
+
+### Assignment errors
+
+```python
+# Error: Incompatible types in assignment
+x: int = "hello"
+
+# Fix: Use correct type
+x: str = "hello"
+# Or: Change value
+x: int = 42
+```
+
+### Call errors
+
+```python
+# Error: Too many arguments
+def greet(name: str) -> None:
+    print(name)
+
+greet("Alice", "Bob")  # Error
+
+# Fix: Match function signature
+greet("Alice")
+```
+
+### Import errors
+
+```python
+# Error: Cannot find module
+import nonexistent
+
+# Fix: Install or ignore
+# pip install nonexistent
+# Or add to mypy.ini:
+# [mypy-nonexistent.*]
+# ignore_missing_imports = True
+```
+
+## Getting help
+
+If you're still stuck:
+
+<CardGroup cols={2}>
+  <Card title="Check documentation" icon="book" href="/introduction">
+    Review the full documentation
+  </Card>
+
+  <Card title="Search issues" icon="magnifying-glass" href="https://github.com/python/mypy/issues">
+    Search existing GitHub issues
+  </Card>
+
+  <Card title="Ask on Gitter" icon="comments" href="https://gitter.im/python/typing">
+    Join the typing discussion
+  </Card>
+
+  <Card title="Report a bug" icon="bug" href="https://github.com/python/mypy/issues/new">
+    File a new issue
+  </Card>
+</CardGroup>
+
+<Tip>
+  When reporting issues, include:
+  - Mypy version (`mypy --version`)
+  - Python version
+  - Minimal reproduction example
+  - Config file content
+  - Complete error message
+</Tip>

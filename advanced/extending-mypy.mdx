@@ -1,0 +1,184 @@
+---
+title: Extending mypy
+description: Learn how to integrate and extend mypy using the plugin system
+---
+
+## Integrating mypy into another Python application
+
+You can integrate mypy into another Python 3 application by importing `mypy.api` and calling the `run` function with a list of command line arguments.
+
+### Basic integration
+
+The `run` function returns a tuple of `(normal_report, error_report, exit_status)`:
+
+```python
+import sys
+from mypy import api
+
+result = api.run(sys.argv[1:])
+
+if result[0]:
+    print('\nType checking report:\n')
+    print(result[0])  # stdout
+
+if result[1]:
+    print('\nError report:\n')
+    print(result[1])  # stderr
+
+print('\nExit status:', result[2])
+```
+
+<Info>
+The `run` function accepts the same arguments that mypy would accept on the command line.
+</Info>
+
+## Extending mypy using plugins
+
+Python's dynamic nature and metaprogramming capabilities make it challenging to express all patterns using static types. Mypy's plugin system lets you customize type checking for libraries that use dynamic APIs.
+
+<Warning>
+The plugin system is experimental and subject to change. Breaking changes may occur without deprecation. Check the [plugin API changes announcement](https://github.com/python/mypy/issues/6617) for updates.
+</Warning>
+
+### Why use plugins?
+
+Plugins are useful when:
+
+- A library uses metaprogramming that's hard to express with PEP 484 types
+- You need to extend mypy's understanding of third-party framework semantics
+- You want to customize type checking behavior for specific patterns
+
+<Note>
+Plugins focus on improving semantic understanding. You cannot define new first-class types.
+</Note>
+
+## Configuring mypy to use plugins
+
+Plugins are specified in your mypy configuration file using the `plugins` option:
+
+<CodeGroup>
+
+```ini mypy.ini
+[mypy]
+plugins = /one/plugin.py, other.plugin
+```
+
+```toml pyproject.toml
+[tool.mypy]
+plugins = ["/one/plugin.py", "other.plugin"]
+```
+
+</CodeGroup>
+
+You can specify plugins as:
+
+- **Relative or absolute paths** to Python files
+- **Module names** (if installed via pip in the same environment)
+
+### Custom entry points
+
+If your plugin uses a different entry point function name:
+
+```ini
+[mypy]
+plugins = custom_plugin:custom_entry_point
+```
+
+## High-level overview
+
+Every plugin entry point function accepts a mypy version string and returns a `Plugin` subclass:
+
+```python
+from mypy.plugin import Plugin
+
+class CustomPlugin(Plugin):
+    def get_type_analyze_hook(self, fullname: str):
+        # Customize type analysis for specific names
+        if fullname == "mylib.SpecialType":
+            return my_analyze_special_type
+        return None
+
+def plugin(version: str):
+    # Ignore version if plugin works with all mypy versions
+    return CustomPlugin
+```
+
+<Steps>
+
+### Step 1: Plugin registration
+
+Mypy collects plugins from the config file and imports them.
+
+### Step 2: Hook method calls
+
+During semantic analysis and type checking, mypy calls hook methods like `get_type_analyze_hook()` on each plugin.
+
+### Step 3: First match wins
+
+Mypy calls each plugin's method until one returns a non-`None` callback.
+
+### Step 4: Callback execution
+
+The callback receives context and API access to create nodes, types, and emit errors.
+
+</Steps>
+
+## Plugin development guidelines
+
+<Warning>
+Plugins must work well in incremental and daemon modes:
+
+- **Do not hold global state** (results are cached)
+- **Always call `add_plugin_dependency()`** during semantic analysis
+- **Make hooks idempotent** (they may be called multiple times)
+</Warning>
+
+### Incremental mode considerations
+
+Plugins can store per-TypeInfo data in the `.metadata` attribute, which is serialized between runs:
+
+```python
+def my_class_hook(ctx: ClassDefContext) -> None:
+    # Store plugin state under a unique key
+    ctx.cls.info.metadata['my_plugin'] = {
+        'processed': True,
+        'custom_data': 'some value'
+    }
+```
+
+<Tip>
+Use your plugin name as the metadata key to avoid collisions. All values must be JSON-serializable.
+</Tip>
+
+## Examples from bundled plugins
+
+Mypy includes several built-in plugins you can reference:
+
+- **dataclasses** - Adds `__init__` and other methods to `@dataclass` decorated classes
+- **attrs** - Supports the attrs library
+- **ctypes** - Handles ctypes array types
+- **enums** - Provides better enum support
+
+<Info>
+Find plugin examples in the [mypy/plugins directory](https://github.com/python/mypy/tree/master/mypy/plugins).
+</Info>
+
+## Testing your plugin
+
+Always test that your plugin handles multiple analysis passes:
+
+```python
+# This forward reference forces a second analysis pass
+c: C  # Forward reference causes second analysis pass
+class C: pass
+```
+
+<Note>
+Forward references in function signatures don't trigger another pass since functions are processed after the module top level.
+</Note>
+
+## Next steps
+
+- Learn about the [plugin system](/advanced/plugin-system) hooks and APIs
+- Explore [additional features](/advanced/additional-features) for advanced use cases
+- Handle [runtime troubles](/advanced/runtime-troubles) with annotations

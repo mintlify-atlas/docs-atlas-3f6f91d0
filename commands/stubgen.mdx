@@ -1,0 +1,285 @@
+---
+title: stubgen
+description: Automatic stub file generator for Python modules
+---
+
+The `stubgen` tool automatically generates stub files (`.pyi` files) for Python modules and C extension modules. Stub files contain type hints for the public interface of a module, with empty function bodies.
+
+## Why use stubs?
+
+Stub files are useful for:
+
+- Third-party modules without type annotations
+- C extension modules that mypy can't directly process
+- Providing type information without modifying source code
+
+<Note>
+Stubgen generates **draft** stubs. The auto-generated files often require manual updates, and most types default to `Any`.
+</Note>
+
+## Basic usage
+
+```bash
+# Generate stubs for Python files
+stubgen foo.py bar.py
+
+# Generate stubs for directories (recursive)
+stubgen my_package/
+
+# Generate stubs for modules
+stubgen -m urllib.parse
+
+# Generate stubs for packages (recursive)
+stubgen -p mypackage
+```
+
+## Specifying what to stub
+
+<ParamField path="files" type="string">
+  Paths to source files for which to generate stubs. Can be files or directories.
+  
+  Output: `out/<filename>.pyi`
+</ParamField>
+
+<ParamField path="-m MODULE, --module MODULE" type="string">
+  Generate a stub file for the given module. May be repeated.
+  
+  Stubgen will not recursively generate stubs for submodules.
+</ParamField>
+
+<ParamField path="-p PACKAGE, --package PACKAGE" type="string">
+  Generate stubs for the given package. May be repeated.
+  
+  Stubgen will recursively generate stubs for all submodules.
+</ParamField>
+
+<Warning>
+You can't mix file paths and `-m`/`-p` options in the same stubgen invocation.
+</Warning>
+
+## Generation mode options
+
+<ParamField path="--no-import" type="boolean">
+  Don't try to import modules. Instead only use mypy's normal search mechanism.
+  
+  - Does not support C extension modules
+  - Disables runtime introspection (affects `__all__` detection)
+  - Useful when importing causes unwanted side effects
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--no-analysis" type="boolean">
+  Don't perform semantic analysis of source files.
+  
+  - May generate worse stubs (aliases become `Any` variables)
+  - Useful if semantic analysis causes critical mypy errors
+  - Does not apply to C extension modules
+  - Incompatible with `--inspect-mode`
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--inspect-mode" type="boolean">
+  Import and inspect modules instead of parsing source code.
+  
+  - Default behavior for C modules and pyc-only packages
+  - Useful for pure Python modules with dynamically generated members
+  - Implies `--no-analysis`
+  
+  Default: `false` (except for C modules)
+</ParamField>
+
+<ParamField path="--doc-dir PATH" type="string">
+  Try to infer better signatures by parsing .rst documentation in PATH.
+  
+  - Only works for C extension modules
+  - Can result in better quality stubs
+</ParamField>
+
+## Output options
+
+<ParamField path="-o PATH, --output PATH" type="string">
+  Change the output directory.
+  
+  Default: `./out`
+  
+  The output directory will be created if it doesn't exist. Existing stubs will be overwritten without warning.
+</ParamField>
+
+<ParamField path="--include-private" type="boolean">
+  Include definitions that are considered private in stubs.
+  
+  Private names: `_foo` (single leading underscore, no trailing underscores)
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--export-less" type="boolean">
+  Don't export all names imported from other modules within the same package.
+  
+  Only export imported names that are referenced in the module.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--include-docstrings" type="boolean">
+  Include docstrings in stubs.
+  
+  Adds docstrings to:
+  - Python function stubs
+  - Python class stubs
+  - C extension function stubs
+  
+  Default: `false`
+</ParamField>
+
+## Additional options
+
+<ParamField path="-h, --help" type="boolean">
+  Show help message and exit.
+</ParamField>
+
+<ParamField path="--ignore-errors" type="boolean">
+  If an exception is raised during stub generation, continue processing remaining modules.
+  
+  Default: `false` (fail immediately on error)
+</ParamField>
+
+<ParamField path="--search-path PATH" type="string">
+  Specify module search directories, separated by colons.
+  
+  Only used if `--no-import` is given.
+</ParamField>
+
+<ParamField path="-v, --verbose" type="boolean">
+  Produce more verbose output.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="-q, --quiet" type="boolean">
+  Produce less verbose output.
+  
+  Default: `false`
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash Generate from Python files
+# Single file
+stubgen mymodule.py
+# Output: out/mymodule.pyi
+
+# Multiple files
+stubgen file1.py file2.py file3.py
+```
+
+```bash Generate from directories
+# Recursive directory scan
+stubgen src/
+# Generates stubs for all .py files in src/
+
+# Multiple directories
+stubgen src/ tests/
+```
+
+```bash Generate from modules
+# Single module
+stubgen -m urllib.parse
+# Output: out/urllib/parse.pyi
+
+# Multiple modules
+stubgen -m http.client -m http.server
+```
+
+```bash Generate from packages
+# Recursive package stubbing
+stubgen -p mypackage
+# Generates stubs for mypackage and all submodules
+
+# Multiple packages
+stubgen -p pkg1 -p pkg2
+```
+
+```bash C extension modules
+# With Sphinx documentation
+stubgen --doc-dir /path/to/Python-3.11/Doc/library -m curses
+
+# Inspection mode (force runtime introspection)
+stubgen --inspect-mode -m myextension
+```
+
+```bash Custom output directory
+stubgen -o stubs/ mypackage/
+# Output: stubs/mypackage/*.pyi
+```
+
+```bash Include everything
+stubgen --include-private --include-docstrings mymodule.py
+```
+</CodeGroup>
+
+## Example output
+
+Given this source file:
+
+```python mymodule.py
+from other_module import dynamic
+
+BORDER_WIDTH = 15
+
+class Window:
+    parent = dynamic()
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+def create_empty() -> Window:
+    return Window(0, 0)
+```
+
+Stubgen generates:
+
+```python out/mymodule.pyi
+from typing import Any
+
+BORDER_WIDTH: int = ...
+
+class Window:
+    parent: Any = ...
+    width: Any = ...
+    height: Any = ...
+    def __init__(self, width, height) -> None: ...
+
+def create_empty() -> Window: ...
+```
+
+<Info>
+Notice that:
+- Type annotations from source are preserved
+- Unannotated types default to `Any`
+- Instance attributes are detected from `__init__`
+- Function bodies are replaced with `...`
+</Info>
+
+## Heuristics and filtering
+
+Stubgen applies heuristics to avoid generating stubs for:
+
+- Test modules and packages
+- Vendored third-party packages (common vendor directory names)
+- Modules in directories named: `site-packages`, `node_modules`, `__pycache__`
+- Directories starting with `.`
+- Files without `.py` or `.pyi` extensions
+
+## Best practices
+
+<Tip>
+1. **Review generated stubs**: Always manually review and refine generated stubs
+2. **Add precise types**: Replace `Any` with more specific types where possible
+3. **Use `--doc-dir` for C modules**: Significantly improves stub quality for C extensions
+4. **Commit stubs separately**: Review stub changes independently from code changes
+5. **Update regularly**: Re-generate when APIs change significantly
+</Tip>

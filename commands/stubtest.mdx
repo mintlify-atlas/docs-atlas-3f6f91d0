@@ -1,0 +1,294 @@
+---
+title: stubtest
+description: Automatic stub testing tool to validate stubs against runtime behavior
+---
+
+The `stubtest` tool automatically checks for discrepancies between stub files and the actual implementation at runtime. It helps ensure stub files stay synchronized with the code they describe.
+
+## What stubtest does
+
+Stubtest will:
+
+- Import your code and introspect it at runtime using the `inspect` module
+- Analyze stub files using mypy
+- Compare the two and report differences
+- Check for missing definitions, incorrect signatures, and type mismatches
+
+<Info>
+Stubtest is used to test Python's official collection of library stubs, [typeshed](https://github.com/python/typeshed).
+</Info>
+
+## What stubtest doesn't do
+
+Stubtest has limitations:
+
+- **No static analysis**: It relies only on runtime introspection
+- **Limited visibility**: Can't verify return types or internal implementation
+- **Can't type check**: Use `mypy` for type checking
+- **Can't generate stubs**: Use `stubgen` or `pyright --createstub` instead
+- **Can't infer from tests**: Use `monkeytype` for runtime-based stub generation
+
+<Warning>
+Stubtest will **import and execute Python code** from the packages it checks. Only run it on trusted code.
+</Warning>
+
+## Basic usage
+
+```bash
+# Check a module
+stubtest module_to_check
+
+# Check with environment setup
+PYTHONPATH=/path/to/code MYPYPATH=/path/to/stubs stubtest mymodule
+```
+
+## Command options
+
+<ParamField path="module" type="string">
+  Module or package name to test against stubs.
+</ParamField>
+
+<ParamField path="--help" type="boolean">
+  Show help message and exit.
+</ParamField>
+
+<ParamField path="--concise" type="boolean">
+  Make stubtest's output more concise, one line per error.
+  
+  Default: `false` (detailed output)
+</ParamField>
+
+<ParamField path="--ignore-missing-stub" type="boolean">
+  Ignore errors for stubs missing things that are present at runtime.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--ignore-positional-only" type="boolean">
+  Ignore errors for whether an argument should or shouldn't be positional-only.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--allowlist FILE" type="string">
+  Use FILE as an allowlist. Can be passed multiple times to combine allowlists.
+  
+  Allowlists support regular expressions. Entries in the allowlist suppress corresponding errors.
+</ParamField>
+
+<ParamField path="--generate-allowlist" type="boolean">
+  Print an allowlist (to stdout) to be used with `--allowlist`.
+  
+  Useful for silencing all existing errors when introducing stubtest to an existing project.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--ignore-unused-allowlist" type="boolean">
+  Ignore unused allowlist entries.
+  
+  Without this, stubtest complains if an allowlist entry isn't necessary.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField path="--mypy-config-file FILE" type="string">
+  Use specified mypy config file to determine mypy plugins and mypy path.
+</ParamField>
+
+<ParamField path="--custom-typeshed-dir DIR" type="string">
+  Use the custom typeshed in DIR.
+</ParamField>
+
+<ParamField path="--check-typeshed" type="boolean">
+  Check all stdlib modules in typeshed.
+  
+  Default: `false`
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash Basic usage
+# Check library module
+stubtest library
+
+# Output
+error: library.foo is inconsistent, runtime argument "x" has a default value but stub argument does not
+Stub: at line 3
+def (x: builtins.int)
+Runtime: in file ~/library.py:3
+def (x=None)
+
+error: library.x variable differs from runtime type Literal['hello, stubtest']
+Stub: at line 1
+builtins.int
+Runtime:
+'hello, stubtest'
+```
+
+```bash Concise output
+stubtest --concise library
+
+# Output
+library.foo is inconsistent, runtime argument "x" has a default value but stub argument does not
+library.x variable differs from runtime type Literal['hello, stubtest']
+```
+
+```bash With allowlist
+stubtest --allowlist allowlist.txt mypackage
+
+# allowlist.txt:
+# Does not exist if optional_dep is not installed:
+mypackage.optional_feature
+
+# regex to ignore multiple similar issues:
+mypackage\..*_internal
+```
+
+```bash Generate allowlist
+# Create allowlist for all current errors
+stubtest --generate-allowlist mypackage > allowlist.txt
+
+# Use the generated allowlist
+stubtest --allowlist allowlist.txt mypackage
+```
+
+```bash Check with config
+stubtest --mypy-config-file mypy.ini mymodule
+```
+</CodeGroup>
+
+## Allowlist format
+
+Allowlist files support:
+
+- **One entry per line**: Each line specifies an error to ignore
+- **Comments**: Lines starting with `#`
+- **Regular expressions**: For matching multiple errors
+- **Optional patterns**: Use `(pattern)?` for conditional suppression
+
+```text allowlist.txt
+# Does not exist if optional_expensive_dep is not installed
+ex.second
+
+# Ignore all internal methods
+module\._.*
+
+# Optional pattern (suppresses error if present, doesn't complain if absent)
+(ex\.optional_feature)?
+
+# Multiple modules
+package.module1
+package.module2.Class
+package.module3.function
+```
+
+<Tip>
+Use `(pattern)?` syntax to create optional allowlist entries. This is useful when an error only occurs on specific platforms or with specific dependencies installed.
+</Tip>
+
+## Example workflow
+
+Here's a complete example showing stubtest in action:
+
+### Source code
+
+```python library.py
+x = "hello, stubtest"
+
+def foo(x=None):
+    print(x)
+
+class Window:
+    def resize(self, width: int, height: int) -> None:
+        pass
+```
+
+### Stub file
+
+```python library.pyi
+x: int
+
+def foo(x: int) -> None: ...
+
+class Window:
+    def resize(self, width: int) -> None: ...  # Missing height parameter!
+```
+
+### Running stubtest
+
+```bash
+stubtest library
+```
+
+### Output
+
+```
+error: library.foo is inconsistent, runtime argument "x" has a default value but stub argument does not
+Stub: at line 3
+def (x: builtins.int)
+Runtime: in file ~/library.py:3
+def (x=None)
+
+error: library.x variable differs from runtime type Literal['hello, stubtest']
+Stub: at line 1
+builtins.int
+Runtime:
+'hello, stubtest'
+
+error: library.Window.resize is inconsistent, stub does not have parameter "height"
+Stub: at line 6
+def (self, width: builtins.int)
+Runtime: in file ~/library.py:7
+def (self, width: int, height: int) -> None
+
+Found 3 errors (checked 1 module)
+```
+
+## Integration with CI
+
+Stubtest works well in continuous integration:
+
+```yaml .github/workflows/stubtest.yml
+name: Check stubs
+
+on: [push, pull_request]
+
+jobs:
+  stubtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install mypy
+          pip install -e .  # Install the package being tested
+      - name: Run stubtest
+        run: stubtest --allowlist allowlist.txt mypackage
+```
+
+## Best practices
+
+<Tip>
+1. **Run regularly**: Include stubtest in your CI pipeline
+2. **Start with allowlist**: Use `--generate-allowlist` for existing projects
+3. **Review allowlist**: Regularly review and reduce allowlist entries
+4. **Use regex sparingly**: Prefer specific entries over broad regex patterns
+5. **Document suppressions**: Comment why each allowlist entry exists
+6. **Test on all platforms**: Use optional patterns `(...)? for platform-specific code
+</Tip>
+
+## Common error types
+
+Stubtest reports various types of inconsistencies:
+
+- **Missing definitions**: Stub doesn't include something from runtime
+- **Extra definitions**: Stub includes something not in runtime
+- **Signature mismatches**: Parameters, defaults, or return types differ
+- **Type mismatches**: Variable types don't match
+- **Positional-only differences**: Arguments marked incorrectly
+- **Class hierarchy differences**: Base classes or metaclasses differ

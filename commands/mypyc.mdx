@@ -1,0 +1,263 @@
+---
+title: mypyc
+description: Python to C compiler that uses type annotations
+---
+
+The `mypyc` command compiles Python modules to C extensions using mypy's type analysis. This can significantly improve the performance of your Python code while maintaining compatibility with the standard Python interpreter.
+
+## Overview
+
+Mypyc compiles type-annotated Python code to C, creating extension modules that can be imported and used like normal Python modules. It uses mypy's static analysis to generate efficient C code.
+
+## Basic usage
+
+```bash
+# Compile a Python module
+mypyc mymodule.py
+
+# Compile multiple modules
+mypyc module1.py module2.py module3.py
+
+# Import and use the compiled module
+python3 -c 'import mymodule'  # Uses compiled version
+```
+
+## How it works
+
+1. **Type analysis**: Uses mypy to analyze your code and its types
+2. **C code generation**: Generates C code based on the type information
+3. **Compilation**: Compiles the C code to a native extension module
+4. **Installation**: Places the compiled module where Python can import it
+
+<Info>
+The compiled modules are fully compatible with regular Python code. You can mix compiled and interpreted code freely.
+</Info>
+
+## Environment variables
+
+Mypyc behavior can be controlled through environment variables:
+
+<ParamField path="MYPYC_OPT_LEVEL" type="string">
+  Optimization level for the compiler.
+  
+  Values: `0` (no optimization) to `3` (maximum optimization)
+  
+  Default: `3`
+  
+  ```bash
+  MYPYC_OPT_LEVEL=2 mypyc mymodule.py
+  ```
+</ParamField>
+
+<ParamField path="MYPYC_DEBUG_LEVEL" type="string">
+  Debug information level.
+  
+  Values: `0` (no debug info) to `3` (maximum debug info)
+  
+  Default: `1`
+  
+  ```bash
+  MYPYC_DEBUG_LEVEL=3 mypyc mymodule.py
+  ```
+</ParamField>
+
+<ParamField path="MYPYC_STRICT_DUNDER_TYPING" type="string">
+  Enable strict typing for dunder methods.
+  
+  Values: `0` (disabled), `1` (enabled)
+  
+  Default: `0`
+  
+  ```bash
+  MYPYC_STRICT_DUNDER_TYPING=1 mypyc mymodule.py
+  ```
+</ParamField>
+
+<ParamField path="MYPYC_LOG_TRACE" type="string">
+  Enable sampled operation logging.
+  
+  Values: `0` (disabled), `1` (enabled)
+  
+  When enabled, writes a log of executed operations to `mypyc_trace.txt`.
+  
+  Default: `0`
+  
+  ```bash
+  MYPYC_LOG_TRACE=1 mypyc mymodule.py
+  ```
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash Basic compilation
+# Compile a single module
+mypyc calculator.py
+
+# The compiled module can now be imported
+python3 -c 'import calculator; print(calculator.add(2, 3))'
+```
+
+```bash Multiple modules
+# Compile an entire package
+mypyc mypackage/__init__.py mypackage/utils.py mypackage/core.py
+
+# All modules are now compiled and ready to use
+python3 -c 'import mypackage; mypackage.run()'
+```
+
+```bash With optimization
+# Maximum optimization
+MYPYC_OPT_LEVEL=3 mypyc performance_critical.py
+
+# No optimization (for debugging)
+MYPYC_OPT_LEVEL=0 MYPYC_DEBUG_LEVEL=3 mypyc debug_me.py
+```
+
+```bash Development workflow
+# During development, lower optimization for faster compilation
+MYPYC_OPT_LEVEL=0 mypyc mymodule.py
+
+# For production builds, use maximum optimization
+MYPYC_OPT_LEVEL=3 MYPYC_DEBUG_LEVEL=0 mypyc mymodule.py
+```
+</CodeGroup>
+
+## Example: Performance boost
+
+Here's a simple example showing the potential speedup:
+
+```python fibonacci.py
+def fib(n: int) -> int:
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+def main() -> None:
+    result = fib(35)
+    print(f"fib(35) = {result}")
+
+if __name__ == "__main__":
+    main()
+```
+
+```bash
+# Compile with mypyc
+mypyc fibonacci.py
+
+# Compare performance
+time python3 fibonacci.py  # Interpreted: ~5 seconds
+time python3 -c 'import fibonacci; fibonacci.main()'  # Compiled: ~0.3 seconds
+```
+
+<Tip>
+Mypyc can provide **10-100x speedups** for computationally intensive, type-annotated Python code, especially code with tight loops and numeric operations.
+</Tip>
+
+## Requirements for best results
+
+To get optimal performance from mypyc:
+
+1. **Add type annotations**: More type information = better optimization
+2. **Use primitive types**: `int`, `float`, `bool` compile to efficient C types
+3. **Avoid `Any`**: Unknown types prevent optimization
+4. **Type class attributes**: Allows direct field access instead of dictionary lookups
+5. **Use final classes**: Enables devirtualization of method calls
+
+```python
+from typing import Final
+
+class Point:
+    x: int
+    y: int
+    
+    def __init__(self, x: int, y: int) -> None:
+        self.x = x
+        self.y = y
+    
+    def distance_squared(self) -> int:
+        return self.x * self.x + self.y * self.y
+
+# With full type annotations, mypyc generates very efficient C code
+```
+
+## Limitations
+
+Some Python features are not supported or have limited support:
+
+- **Dynamic code execution**: `eval()`, `exec()` not supported
+- **Some magic methods**: Limited support for some special methods
+- **Reflection**: Some introspection features may not work
+- **Monkey patching**: Compiled code can't be easily modified at runtime
+
+<Warning>
+Mypyc is best suited for computational code, libraries, and performance bottlenecks. It's not a replacement for all Python code.
+</Warning>
+
+## Integration with setuptools
+
+For building distributable packages with mypyc:
+
+```python setup.py
+from setuptools import setup
+from mypyc.build import mypycify
+
+setup(
+    name='mypackage',
+    ext_modules=mypycify(
+        ['mypackage/module1.py', 'mypackage/module2.py'],
+        opt_level="3",
+        debug_level="0",
+    ),
+)
+```
+
+```bash
+# Build and install
+python setup.py build_ext --inplace
+pip install .
+```
+
+## Debugging compiled code
+
+When debugging mypyc-compiled modules:
+
+```bash
+# Compile with full debug info
+MYPYC_DEBUG_LEVEL=3 MYPYC_OPT_LEVEL=0 mypyc mymodule.py
+
+# Enable operation tracing
+MYPYC_LOG_TRACE=1 python3 -c 'import mymodule; mymodule.test()'
+cat mypyc_trace.txt
+```
+
+## Performance tips
+
+<Tip>
+1. **Profile first**: Identify bottlenecks before compiling
+2. **Compile incrementally**: Start with the slowest modules
+3. **Add type annotations**: More types = better performance
+4. **Use primitives**: Native int/float operations are fastest
+5. **Avoid `Any`**: Fully typed code compiles much better
+6. **Test thoroughly**: Compiled code may behave slightly differently
+7. **Benchmark**: Measure actual speedup for your use case
+</Tip>
+
+## Building for distribution
+
+When distributing mypyc-compiled packages:
+
+1. **Include source**: Always ship both .py and compiled modules
+2. **Platform-specific**: Build wheels for each target platform
+3. **Fallback**: Ensure code works interpreted if compilation fails
+4. **Test compiled**: Test both compiled and interpreted versions
+
+```toml pyproject.toml
+[build-system]
+requires = ["setuptools", "wheel", "mypy"]
+build-backend = "setuptools.build_meta"
+
+[tool.cibuildwheel]
+build = "cp39-* cp310-* cp311-*"
+skip = "*-musllinux_*"
+```

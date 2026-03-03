@@ -1,80 +1,430 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with mypy in 5 minutes
 ---
 
-## Get started in three steps
+# Quickstart guide
 
-Get your documentation site running locally and make your first customization.
+This guide will get you type checking Python code with mypy in just a few minutes.
 
-### Step 1: Set up your local environment
+<Info>
+Make sure you've [installed mypy](/installation) before following this guide.
+</Info>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+## Your first type-checked program
+
+Let's start with a simple example to see mypy in action.
+
+<Steps>
+  <Step title="Create a Python file">
+    Create a file called `example.py` with the following code:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```python example.py
+    def greeting(name):
+        return 'Hello ' + name
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    greeting('World')  # This is fine
+    greeting(123)      # This will fail at runtime
+    ```
+  </Step>
+  
+  <Step title="Run mypy without type hints">
+    Try running mypy on this file:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    mypy example.py
+    ```
+    
+    You'll see:
+    ```
+    Success: no issues found in 1 source file
+    ```
+    
+    <Note>
+    By default, mypy doesn't check functions without type annotations. This makes it easy to adopt mypy incrementally.
+    </Note>
+  </Step>
+  
+  <Step title="Add type hints">
+    Now let's add type hints to catch the bug:
+    
+    ```python example.py
+    def greeting(name: str) -> str:
+        return 'Hello ' + name
+    
+    greeting('World')  # This is fine
+    greeting(123)      # Now mypy will catch this!
+    ```
+  </Step>
+  
+  <Step title="Run mypy with type hints">
+    Run mypy again:
+    
+    ```bash
+    mypy example.py
+    ```
+    
+    Now you'll see an error:
+    ```
+    example.py:4: error: Argument 1 to "greeting" has incompatible type "int"; expected "str"  [arg-type]
+    Found 1 error in 1 file (checked 1 source file)
+    ```
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Tip>
+Mypy caught the bug **without running the code**! This is the power of static type checking.
+</Tip>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Understanding type annotations
 
-### Step 3: Go live
+Type annotations tell mypy (and other readers) what types your code expects:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<CodeGroup>
+
+```python Function annotations
+# The "name: str" says the parameter should be a string
+# The "-> str" says the function returns a string
+def greeting(name: str) -> str:
+    return 'Hello ' + name
+```
+
+```python Variable annotations
+# Explicitly declare variable types
+age: int = 25
+name: str = "Alice"
+height: float = 5.6
+is_student: bool = True
+```
+
+```python Collection types
+# List of integers
+numbers: list[int] = [1, 2, 3]
+
+# Dictionary with string keys and float values
+scores: dict[str, float] = {"Alice": 95.5, "Bob": 87.3}
+
+# Tuple with specific types for each position
+point: tuple[int, int] = (10, 20)
+```
+
+</CodeGroup>
+
+## Dynamic vs static typing
+
+Mypy distinguishes between dynamically and statically typed functions:
+
+<CodeGroup>
+
+```python Dynamically typed (not checked)
+def add(x, y):
+    return x + y
+
+# Mypy won't check this, even though it will fail at runtime
+add("hello", 123)
+```
+
+```python Statically typed (checked)
+def add(x: int, y: int) -> int:
+    return x + y
+
+# Mypy catches this error
+add("hello", 123)  # error: Argument 1 has incompatible type "str"; expected "int"
+```
+
+</CodeGroup>
+
+<Note>
+You can control this behavior with flags like `--disallow-untyped-defs` to require type hints on all functions.
+</Note>
+
+## Working with complex types
+
+Mypy supports sophisticated type expressions:
+
+### Union types
+
+When a value can be one of several types:
+
+```python
+def normalize_id(user_id: int | str) -> str:
+    if isinstance(user_id, int):
+        return f'user-{100_000 + user_id}'
+    else:
+        return user_id
+
+normalize_id(123)      # OK: returns 'user-100123'
+normalize_id('admin')  # OK: returns 'admin'
+```
+
+### Optional types
+
+For values that might be None:
+
+```python
+def greet(name: str | None = None) -> str:
+    if name is None:
+        return "Hello, stranger!"
+    return f"Hello, {name}!"
+
+greet()          # OK: "Hello, stranger!"
+greet("Alice")   # OK: "Hello, Alice!"
+```
+
+<Info>
+On Python 3.9 and earlier, use `Optional[str]` instead of `str | None`, or add `from __future__ import annotations` at the top of your file.
+</Info>
+
+### Generic types
+
+For collections with specific item types:
+
+```python
+from collections.abc import Iterable
+
+def greet_all(names: Iterable[str]) -> None:
+    for name in names:
+        print('Hello ' + name)
+
+names = ["Alice", "Bob", "Charlie"]
+greet_all(names)   # OK
+
+ages = [10, 20, 30]
+greet_all(ages)    # error: List item 0 has incompatible type "int"; expected "str"
+```
+
+## Checking multiple files
+
+Mypy can check entire directories:
+
+<CodeGroup>
+
+```bash Check a single file
+mypy program.py
+```
+
+```bash Check multiple files
+mypy file1.py file2.py file3.py
+```
+
+```bash Check a directory recursively
+mypy my_project/
+```
+
+```bash Check a module
+mypy -m my_module
+```
+
+```bash Check a package recursively
+mypy -p my_package
+```
+
+</CodeGroup>
+
+## Real-world example
+
+Here's a more complete example showing mypy in action:
+
+```python user.py
+from dataclasses import dataclass
+
+@dataclass
+class User:
+    name: str
+    email: str
+    age: int
+
+def create_user(name: str, email: str, age: int) -> User:
+    if age < 0:
+        raise ValueError("Age cannot be negative")
+    return User(name=name, email=email, age=age)
+
+def send_email(user: User, message: str) -> None:
+    print(f"Sending to {user.email}: {message}")
+
+# Usage
+user = create_user("Alice", "alice@example.com", 30)
+send_email(user, "Welcome!")
+
+# Mypy catches these errors:
+create_user("Bob", "bob@example.com", "thirty")  # error: Argument 3 has incompatible type "str"; expected "int"
+send_email("not a user", "Hello")  # error: Argument 1 has incompatible type "str"; expected "User"
+```
+
+Run mypy on this file:
+
+```bash
+mypy user.py
+```
+
+Output:
+```
+user.py:19: error: Argument 3 to "create_user" has incompatible type "str"; expected "int"  [arg-type]
+user.py:20: error: Argument 1 to "send_email" has incompatible type "str"; expected "User"  [arg-type]
+Found 2 errors in 1 file (checked 1 source file)
+```
+
+## Daemon mode for faster checking
+
+For large codebases, use daemon mode for much faster incremental checking:
+
+<Steps>
+  <Step title="Start the daemon">
+    ```bash
+    dmypy run -- my_project/
+    ```
+    
+    The first run will be slow as it builds the cache.
+  </Step>
+  
+  <Step title="Make changes">
+    Edit your code files.
+  </Step>
+  
+  <Step title="Re-check (much faster)">
+    ```bash
+    dmypy run -- my_project/
+    ```
+    
+    Subsequent runs are often sub-second, even for large projects.
+  </Step>
+  
+  <Step title="Stop the daemon (optional)">
+    ```bash
+    dmypy stop
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+Daemon mode can provide 10-50x speedup on incremental checks for large codebases.
+</Tip>
+
+## Configuration file
+
+For project-specific settings, create a `mypy.ini` or `pyproject.toml` file:
+
+<CodeGroup>
+
+```ini mypy.ini
+[mypy]
+python_version = 3.10
+warn_return_any = True
+warn_unused_configs = True
+disallow_untyped_defs = True
+
+# Per-module options
+[mypy-tests.*]
+disallow_untyped_defs = False
+```
+
+```toml pyproject.toml
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+```
+
+</CodeGroup>
+
+Mypy will automatically find and use configuration files in your project directory.
+
+## Common flags
+
+Here are some useful command-line flags:
+
+| Flag | Description |
+|------|-------------|
+| `--strict` | Enable all optional checks (recommended for new projects) |
+| `--disallow-untyped-defs` | Require type hints on all functions |
+| `--ignore-missing-imports` | Silently ignore imports of untyped libraries |
+| `--show-error-codes` | Show error codes in output (helpful for filtering) |
+| `--pretty` | Use nicer output with source code snippets |
+| `--install-types` | Automatically install missing type stubs |
+
+<CodeGroup>
+
+```bash Strict mode
+mypy --strict my_project/
+```
+
+```bash Pretty output
+mypy --pretty my_project/
+```
+
+```bash Auto-install type stubs
+mypy --install-types --non-interactive my_project/
+```
+
+</CodeGroup>
+
+## Handling third-party libraries
+
+When you import libraries without type hints, mypy will complain:
+
+```
+error: Library stubs not installed for "requests"
+note: Hint: "python3 -m pip install types-requests"
+```
+
+You have several options:
+
+<Steps>
+  <Step title="Install type stubs">
+    Many popular libraries have separate stub packages:
+    
+    ```bash
+    python3 -m pip install types-requests types-PyYAML
+    ```
+    
+    Or let mypy install them automatically:
+    
+    ```bash
+    mypy --install-types --non-interactive my_project/
+    ```
+  </Step>
+  
+  <Step title="Ignore missing imports (per-library)">
+    In your config file:
+    
+    ```ini mypy.ini
+    [mypy-requests.*]
+    ignore_missing_imports = True
+    ```
+  </Step>
+  
+  <Step title="Ignore all missing imports (not recommended)">
+    Use the flag (but this reduces type safety):
+    
+    ```bash
+    mypy --ignore-missing-imports my_project/
+    ```
+  </Step>
+</Steps>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you know the basics:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Cheat sheet" icon="sheet-plastic" href="/cheat-sheet">
+    Quick reference for common type hints and patterns.
+  </Card>
+  
+  <Card title="Type system reference" icon="book">
+    Deep dive into mypy's type system features.
+  </Card>
+  
+  <Card title="Configuration" icon="gear">
+    Learn about all configuration options.
+  </Card>
+  
+  <Card title="Common issues" icon="circle-question">
+    Solutions to frequently encountered problems.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

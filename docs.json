@@ -1,122 +1,120 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Mypy",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#3776AB",
+    "light": "#5B91C7",
+    "dark": "#2A5A8A"
   },
   "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/python/mypy"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/python/mypy"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
+              "introduction",
+              "installation",
               "quickstart",
-              "development"
+              "cheat-sheet"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Type System",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "type-system/type-basics",
+              "type-system/builtin-types",
+              "type-system/type-inference",
+              "type-system/kinds-of-types",
+              "type-system/class-basics",
+              "type-system/protocols",
+              "type-system/generics",
+              "type-system/literal-types",
+              "type-system/typed-dict",
+              "type-system/final-attrs",
+              "type-system/metaclasses"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Command Reference",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "commands/mypy",
+              "commands/dmypy",
+              "commands/stubgen",
+              "commands/stubtest",
+              "commands/mypyc"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Configuration",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "configuration/config-file",
+              "configuration/command-line",
+              "configuration/inline-config",
+              "configuration/error-codes"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/running-mypy",
+              "guides/existing-code",
+              "guides/common-issues",
+              "guides/troubleshooting",
+              "guides/type-narrowing",
+              "guides/dynamic-typing",
+              "guides/stubs",
+              "guides/installed-packages"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/extending-mypy",
+              "advanced/plugin-system",
+              "advanced/additional-features",
+              "advanced/runtime-troubles",
+              "advanced/supported-features"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Public API",
             "pages": [
-              "api-reference/introduction"
+              "api/overview",
+              "api/run",
+              "api/types"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Error Codes",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/error-codes/overview",
+              "api/error-codes/type-errors",
+              "api/error-codes/syntax-errors",
+              "api/error-codes/other-errors"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,477 @@
+---
+title: Type checking installed packages
+description: Using PEP 561 packages and type stubs for third-party libraries
+---
+
+Packages installed with pip can declare that they support type checking, either by including type information inline or by providing separate stub packages.
+
+## PEP 561 packages
+
+[PEP 561](https://peps.python.org/pep-0561/) specifies how packages can declare type checking support.
+
+There are two types:
+
+<Tabs>
+  <Tab title="Inline typed">
+    Packages with type hints in the source code:
+
+    ```python
+    # aiohttp includes type hints
+    from aiohttp import ClientSession
+
+    async def fetch(url: str) -> str:
+        async with ClientSession() as session:
+            async with session.get(url) as response:
+                return await response.text()
+    ```
+
+    Install normally:
+    ```bash
+    pip install aiohttp
+    ```
+  </Tab>
+
+  <Tab title="Stub-only">
+    Separate packages providing only stubs:
+
+    ```python
+    # requests doesn't include types, use stub package
+    import requests
+
+    def fetch(url: str) -> str:
+        response = requests.get(url)
+        return response.text
+    ```
+
+    Install stub package:
+    ```bash
+    pip install types-requests
+    ```
+  </Tab>
+</Tabs>
+
+## Using typed packages
+
+Mypy automatically finds and uses installed packages that support type checking:
+
+<Steps>
+  <Step title="Install the package">
+    ```bash
+    pip install aiohttp
+    ```
+  </Step>
+
+  <Step title="Install type stubs if needed">
+    For packages without inline types:
+
+    ```bash
+    pip install types-requests
+    ```
+  </Step>
+
+  <Step title="Run mypy">
+    ```bash
+    mypy myproject
+    ```
+
+    Mypy automatically finds types in the installed packages.
+  </Step>
+</Steps>
+
+<Note>
+  Packages must be installed in the same Python environment where you run mypy.
+</Note>
+
+## Finding stub packages
+
+### Manual installation
+
+Stub packages usually follow the naming convention `types-<package>`:
+
+```bash
+pip install types-requests
+pip install types-redis  
+pip install types-PyYAML
+pip install types-toml
+```
+
+### Automatic installation
+
+Mypy can suggest and install missing stubs:
+
+```bash
+# Discover missing stubs
+mypy --install-types myproject
+
+# Install non-interactively (for CI)
+mypy --install-types --non-interactive myproject
+```
+
+This will:
+1. Run mypy on your code
+2. Detect missing type stubs
+3. Suggest stub packages to install
+4. Optionally install them automatically
+
+## Stub package versions
+
+<Warning>
+  Stub packages often use newer type system features. Pin versions if using older mypy:
+
+  ```txt
+  # requirements-dev.txt
+  mypy==1.8.0
+  types-requests==2.31.0.6
+  types-redis==4.6.0.11
+  ```
+</Warning>
+
+### Version compatibility
+
+Stub versions usually track the library version:
+
+```bash
+# For requests 2.31.x
+pip install types-requests==2.31.*
+```
+
+But stub updates may require newer mypy:
+
+```
+error: Unsupported type hint (requires Python 3.10+)
+```
+
+Solution: Pin both mypy and stub versions.
+
+## Typeshed stubs
+
+Mypy includes [typeshed](https://github.com/python/typeshed), which provides:
+
+- Python standard library stubs
+- Third-party library stubs (deprecated - now use separate packages)
+
+### Standard library
+
+Built-in and standard library modules are always typed:
+
+```python
+import json
+import pathlib
+from typing import Any
+
+data: dict[str, Any] = json.loads('{"key": "value"}')
+path: pathlib.Path = pathlib.Path("/tmp/file.txt")
+```
+
+No installation needed - typeshed is bundled with mypy.
+
+## Using different Python environments
+
+If packages are installed in a different environment:
+
+### Option 1: Point to the Python executable
+
+```bash
+mypy --python-executable /path/to/venv/bin/python myproject
+```
+
+Mypy will use that environment's packages.
+
+### Option 2: Install in mypy's environment
+
+```bash
+# Activate mypy's environment
+source venv/bin/activate
+
+# Install packages
+pip install aiohttp types-requests
+
+# Run mypy
+mypy myproject
+```
+
+## Disabling site-packages
+
+To ignore all installed packages:
+
+```bash
+mypy --no-site-packages myproject
+```
+
+Or in configuration:
+
+```ini
+[mypy]
+no_site_packages = True
+```
+
+Useful when you want complete control over type checking.
+
+## Creating typed packages
+
+To make your package support type checking:
+
+### Inline typed package
+
+<Steps>
+  <Step title="Add type hints to code">
+    ```python
+    # mypackage/core.py
+    def process(data: str) -> dict[str, int]:
+        return {"length": len(data)}
+    ```
+  </Step>
+
+  <Step title="Add py.typed marker">
+    ```bash
+    touch mypackage/py.typed
+    ```
+
+    This tells mypy the package includes type information.
+  </Step>
+
+  <Step title="Include in package data">
+    ```python
+    # setup.py
+    from setuptools import setup
+
+    setup(
+        name="mypackage",
+        packages=["mypackage"],
+        package_data={"mypackage": ["py.typed"]},
+    )
+    ```
+
+    Or in pyproject.toml:
+    ```toml
+    [tool.setuptools.package-data]
+    mypackage = ["py.typed"]
+    ```
+  </Step>
+</Steps>
+
+### Stub-only package
+
+For packages you don't maintain:
+
+<Steps>
+  <Step title="Create stub package structure">
+    ```
+    types-mypackage/
+    ├── setup.py
+    └── mypackage-stubs/
+        ├── __init__.pyi
+        ├── core.pyi
+        └── py.typed
+    ```
+  </Step>
+
+  <Step title="Write stubs">
+    ```python
+    # mypackage-stubs/core.pyi
+    def process(data: str) -> dict[str, int]: ...
+    ```
+  </Step>
+
+  <Step title="Configure setup.py">
+    ```python
+    # setup.py
+    from setuptools import setup
+
+    setup(
+        name="types-mypackage",
+        version="1.0.0",
+        packages=["mypackage-stubs"],
+        package_data={"mypackage-stubs": ["*.pyi", "py.typed"]},
+    )
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  Stub packages use the `-stubs` suffix in the package directory name, but `types-` prefix for the distribution name.
+</Info>
+
+## Handling missing type information
+
+When a package lacks types:
+
+### Ignore missing imports
+
+```ini
+[mypy-untyped_package.*]
+ignore_missing_imports = True
+```
+
+This silences errors but provides no type checking for the package.
+
+### Create local stubs
+
+Create stubs in your project:
+
+```
+myproject/
+├── stubs/
+│   └── untyped_package/
+│       ├── __init__.pyi
+│       └── module.pyi
+└── myproject/
+    └── main.py
+```
+
+Configure MYPYPATH:
+
+```bash
+export MYPYPATH=./stubs
+```
+
+### Contribute to typeshed
+
+Create stubs and contribute to [typeshed](https://github.com/python/typeshed):
+
+1. Fork typeshed
+2. Add stubs in `stubs/packagename/`
+3. Add `METADATA.toml`
+4. Submit pull request
+
+## Configuration examples
+
+### Using typed packages
+
+```ini
+# mypy.ini
+[mypy]
+python_version = 3.10
+
+# Automatically find installed packages
+no_site_packages = False  # Default
+
+# Warn about missing stubs
+warn_missing_imports = True
+```
+
+### Ignoring untyped packages
+
+```ini
+[mypy]
+# Strict checking
+strict = True
+
+# But ignore specific untyped packages
+[mypy-legacy_package.*]
+ignore_missing_imports = True
+
+[mypy-another_untyped.*]
+ignore_missing_imports = True
+```
+
+### Different environments
+
+```ini
+[mypy]
+# Point to production environment
+python_executable = /usr/bin/python3.10
+```
+
+## Troubleshooting
+
+### Stubs not found
+
+Check package installation:
+
+```bash
+pip list | grep types-
+```
+
+Verify mypy finds them:
+
+```bash
+mypy --verbose myproject 2>&1 | grep "site-packages"
+```
+
+### Wrong stub version
+
+Update stub package:
+
+```bash
+pip install --upgrade types-requests
+```
+
+### Conflicting type information
+
+If both inline types and stubs exist:
+
+1. Inline types (package's `.py` files) take precedence
+2. Separate stub package is ignored
+
+Remove stub package if the main package now has inline types:
+
+```bash
+pip uninstall types-requests
+```
+
+### Cannot use MYPYPATH for stubs
+
+<Warning>
+  Stub-only packages must be installed - they cannot be used via MYPYPATH:
+
+  ```bash
+  # This won't work
+  export MYPYPATH=/path/to/types-requests
+
+  # Must install instead
+  pip install types-requests
+  ```
+</Warning>
+
+## Popular stub packages
+
+Commonly used stub packages:
+
+```bash
+# Web frameworks
+pip install types-Flask
+pip install types-requests
+
+# Databases
+pip install types-redis
+pip install types-pymongo
+
+# Data formats
+pip install types-PyYAML
+pip install types-toml
+
+# Testing
+pip install types-pytest
+
+# Cloud services
+pip install boto3-stubs[essential]
+```
+
+<Tip>
+  Use `mypy --install-types` to automatically discover and install needed stub packages.
+</Tip>
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Pin versions" icon="thumbtack">
+    Pin both mypy and stub package versions in requirements
+  </Card>
+
+  <Card title="Check CI environment" icon="server">
+    Ensure CI installs the same packages as local development
+  </Card>
+
+  <Card title="Contribute stubs" icon="handshake">
+    Share stubs with typeshed to help the community
+  </Card>
+
+  <Card title="Update regularly" icon="arrows-rotate">
+    Keep stub packages updated as libraries evolve
+  </Card>
+</CardGroup>
+
+<Note>
+  Starting in mypy 0.900, most third-party stubs are separate packages. This allows independent versioning and faster updates.
+</Note>
