@@ -1,0 +1,126 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Mypy",
+  "projectDescription": "Optional static type checker for Python with gradual typing support",
+  "theme": "aspen",
+  "primaryColor": "#3776AB",
+  "lightColor": "#5B91C7",
+  "darkColor": "#2A5A8A",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart",
+              "cheat-sheet"
+            ]
+          },
+          {
+            "group": "Type System",
+            "pages": [
+              "type-system/type-basics",
+              "type-system/builtin-types",
+              "type-system/type-inference",
+              "type-system/kinds-of-types",
+              "type-system/class-basics",
+              "type-system/protocols",
+              "type-system/generics",
+              "type-system/literal-types",
+              "type-system/typed-dict",
+              "type-system/final-attrs",
+              "type-system/metaclasses"
+            ]
+          },
+          {
+            "group": "Command Reference",
+            "pages": [
+              "commands/mypy",
+              "commands/dmypy",
+              "commands/stubgen",
+              "commands/stubtest",
+              "commands/mypyc"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/command-line",
+              "configuration/inline-config",
+              "configuration/error-codes"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/running-mypy",
+              "guides/existing-code",
+              "guides/common-issues",
+              "guides/troubleshooting",
+              "guides/type-narrowing",
+              "guides/dynamic-typing",
+              "guides/stubs",
+              "guides/installed-packages"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/extending-mypy",
+              "advanced/plugin-system",
+              "advanced/additional-features",
+              "advanced/runtime-troubles",
+              "advanced/supported-features"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Public API",
+            "pages": [
+              "api/overview",
+              "api/run",
+              "api/types"
+            ]
+          },
+          {
+            "group": "Error Codes",
+            "pages": [
+              "api/error-codes/overview",
+              "api/error-codes/type-errors",
+              "api/error-codes/syntax-errors",
+              "api/error-codes/other-errors"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Static type checking for Python",
+    "Gradual typing support",
+    "Type inference",
+    "Generic types and protocols",
+    "Plugin system for extensibility",
+    "Daemon mode for fast incremental checking",
+    "Stub generation and testing",
+    "Mypyc Python-to-C compiler"
+  ],
+  "publicApiSurface": [
+    "mypy - Main type checking command",
+    "dmypy - Daemon mode for incremental type checking",
+    "stubgen - Automatic stub file generator",
+    "stubtest - Stub file validator",
+    "mypyc - Python to C extension compiler",
+    "mypy.api.run() - Programmatic API for type checking",
+    "mypy.api.run_dmypy() - Programmatic daemon API"
+  ]
+}
